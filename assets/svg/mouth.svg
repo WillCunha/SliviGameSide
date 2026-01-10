@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="140" viewBox="0 0 260 140">
+  <!-- Simplified mouth with black stroke -->
+  <g fill="none" stroke="#000" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <!-- upper lip / smile curve -->
+    <path d="M20 70 C 70 20, 190 20, 240 70" />
+    <!-- lower lip / slight thickness -->
+    <path d="M30 80 C 80 120, 180 120, 230 80" />
+  </g>
+  <!-- mouth interior (optional) -->
+  <path d="M60 85 C 95 105, 165 105, 200 85 C 165 115, 95 115, 60 85 Z" fill="#000" opacity="0.06" />
+</svg>
