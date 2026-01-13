@@ -1,25 +1,30 @@
+import { useEffect, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
+  Image,
+  StyleSheet,
+  TouchableOpacity,
+  View
+} from 'react-native';
+
+// --- IMPORTS DOS COMPONENTES ---
 import RainAnimation from '@/components/RainAnimation';
 import Slivi from '@/components/slivi';
 import FoodModal from '@/src/components/foods/foodModal';
+
+// --- IMPORTS DE SERVIÇOS E DADOS ---
+import { FOOD_IMAGES } from '@/src/components/foods/foodMap';
+import { feedSlivi } from '@/src/services/feedService'; // <--- 1. Importando o serviço
 import { fetchSliviState } from '@/src/services/sliviService';
 import { Emotion } from '@/src/types/emotions';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 const { width } = Dimensions.get('window');
 const WINDOW_SIZE = width * 0.6;
 
-// --- CONFIGURAÇÃO DA COMIDA E BOCA ---
-// Substitua pelos caminhos reais das imagens que você salvou
 const MOUTH_OPEN = require('../assets/images/personagem/mouth/mouth_open.png');
 const MOUTH_CLOSED = require('../assets/images/personagem/mouth/mouth_neutro.png');
-
-const FOOD_SPRITES = [
-  require('../assets/images/food/full_chicken.png'),
-  require('../assets/images/food/first_bite_chicken.png'),
-  require('../assets/images/food/second_bite_chicken.png'),
-  require('../assets/images/food/finished_bite_chicken.png')
-];
 
 type Props = {
   token: string;
@@ -35,47 +40,85 @@ export default function HomeScreen({ token }: Props) {
   const [mouthOverride, setMouthOverride] = useState<any>(null);
   const [isAnimating, setIsAnimating] = useState(false);
 
+  // --- ESTADOS PARA COMIDA E LÓGICA ---
+  const [currentFoodKey, setCurrentFoodKey] = useState<string | null>(null);
+  const [currentFoodId, setCurrentFoodId] = useState<number | null>(null); // <--- 2. Estado para o ID
   const [foodModalVisible, setFoodModalVisible] = useState(false);
 
+  // Recupera sprites dinamicamente
+  const currentSprites = currentFoodKey ? (FOOD_IMAGES as any)[currentFoodKey] : [];
 
   useEffect(() => {
-    async function loadState() {
-      try {
-        const state = await fetchSliviState(token);
-        setEmotion(state.emotion);
-      } catch (err: any) {
-        Alert.alert("Erro: ", err.message);
-      } finally {
-        setLoading(false);
-      }
-    }
     loadState();
+
+    const intervalId = setInterval(() => {
+      loadState();
+    }, 60000);
+
+    // 3. Função de limpeza: cancela o intervalo se o usuário sair da tela
+    return () => clearInterval(intervalId);
   }, [token]);
 
-  // Função de delay
+  async function loadState() {
+    try {
+      const state = await fetchSliviState(token);
+      setEmotion(state.emotion);
+    } catch (err: any) {
+      Alert.alert("Erro: ", err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-  // Lógica de comer
+  function startEatingAnimation(food: any) {
+
+    setCurrentFoodKey(food.image_key);
+    setCurrentFoodId(food.id); // <--- 3. Salvamos o ID aqui para usar depois
+
+    setFoodStage(0);
+    setFoodVisible(true);
+    setIsAnimating(false);
+    setFoodModalVisible(false);
+  }
+
   const handleEat = async () => {
-    if (isAnimating || foodStage >= 3) return;
+    if (isAnimating) return;
+    if (!currentSprites || currentSprites.length === 0) return;
 
     setIsAnimating(true);
 
-    // 1. Abre a boca
+    // Animação da boca abrindo
     setMouthOverride(MOUTH_OPEN);
     await wait(300);
 
-    // 2. Morde e troca a imagem da comida
+    // Mordida
     setMouthOverride(MOUTH_CLOSED);
-    setFoodStage(prev => prev + 1);
+    const nextStage = foodStage + 1;
+    setFoodStage(nextStage);
     await wait(400);
 
-    // 3. Finaliza a mordida
+    // Boca volta ao normal
     setMouthOverride(null);
 
-    if (foodStage + 1 === 3) {
-      setEmotion('FELIZ');
+    // VERIFICA SE ACABOU A COMIDA
+    if (nextStage >= currentSprites.length - 1) {
+      // <--- 4. Chamada à API ao concluir
+      if (currentFoodId) {
+        try {
+          await feedSlivi(currentFoodId); // Chama o serviço
+
+          await loadState();
+
+        } catch (error) {
+          Alert.alert("Erro", "Não foi possível computar a alimentação.");
+        }
+      }
+
       setFoodVisible(false);
+      setCurrentFoodKey(null);
+      setCurrentFoodId(null);
     }
 
     setIsAnimating(false);
@@ -83,37 +126,43 @@ export default function HomeScreen({ token }: Props) {
 
   if (loading) return <ActivityIndicator size="large" />;
 
-  <FoodModal
-    visible={foodModalVisible}
-    onClose={() => setFoodModalVisible(false)}
-    onSelectFood={(food) => {
-      setFoodModalVisible(false);
-      startEatingAnimation(food); // você já tem isso
-    }}
-  />
-
   return (
     <View style={styles.roomWall}>
-      {/* --- JANELA --- */}
+      <View style={styles.headerComponent}>
+        <TouchableOpacity
+          style={styles.btnSpawn}
+          onPress={() => setFoodModalVisible(true)}
+        >
+          <Image
+            source={require('../assets/images/components/botoes/elemento-geladeira.png')}
+            style={{ width: 75, height: 75 }} />
+        </TouchableOpacity>
+      </View>
       <View style={styles.windowWrapper}>
-        <Image source={require('../assets/images/weather/rain_storm.png')} style={styles.skyBackground} resizeMode='stretch' />
+        <Image
+          source={require('../assets/images/weather/rain_storm.png')}
+          style={styles.skyBackground}
+          resizeMode='stretch'
+        />
         <View style={styles.weatherLayer}><RainAnimation /></View>
-        <Image source={require('../assets/images/components/windows/normal_window_gameV2.png')} resizeMode='stretch' style={styles.windowFrameImage} />
+        <Image
+          source={require('../assets/images/components/windows/normal_window_gameV2.png')}
+          resizeMode='stretch'
+          style={styles.windowFrameImage}
+        />
       </View>
 
-      {/* --- SLIVI --- */}
       <View style={styles.sliviArea}>
         <Slivi scale={1} emotion={emotion} mouthOverride={mouthOverride} />
 
-        {/* --- COMIDA (Aparece ao lado dele) --- */}
-        {foodVisible && (
+        {foodVisible && currentSprites.length > 0 && (
           <TouchableOpacity
             onPress={handleEat}
             style={styles.foodTouch}
-            disabled={isAnimating || foodStage === 3}
+            disabled={isAnimating}
           >
             <Image
-              source={FOOD_SPRITES[foodStage]}
+              source={currentSprites[foodStage]}
               style={styles.foodImg}
               resizeMode="contain"
             />
@@ -121,13 +170,13 @@ export default function HomeScreen({ token }: Props) {
         )}
       </View>
 
-      {/* --- BOTÃO FLUTUANTE DE TESTE --- */}
-      <TouchableOpacity
-        style={styles.btnSpawn}
-        onPress={() => setFoodModalVisible(true)}
-      >
-        <Text style={{ color: 'white', fontWeight: 'bold' }}>Alimentar</Text>
-      </TouchableOpacity>
+
+
+      <FoodModal
+        visible={foodModalVisible}
+        onClose={() => setFoodModalVisible(false)}
+        onSelectFood={(food) => startEatingAnimation(food)}
+      />
     </View>
   );
 }
@@ -159,14 +208,13 @@ const styles = StyleSheet.create({
     zIndex: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    width: '100%', // 👈 Adicionado para garantir que o absolute não quebre
+    width: '100%',
   },
 
-  // Estilos da Comida
   foodTouch: {
     position: 'absolute',
-    right: 100, // Posiciona a coxinha à direita do Slivi
-    top: 190,  // Ajuste conforme a altura da boca dele
+    right: 100,
+    top: 190,
     backgroundColor: 'transparent'
   },
   foodImg: {
@@ -174,15 +222,14 @@ const styles = StyleSheet.create({
     height: 140,
   },
 
-  // Botão de Spawn (Canto inferior direito)
+  headerComponent: {
+    minHeight: 50,
+    maxHeight: 50,
+  },
+
   btnSpawn: {
-    position: 'absolute',
-    bottom: 30,
-    right: 20,
-    backgroundColor: '#E67E22',
-    padding: 15,
-    borderRadius: 30,
-    zIndex: 9999, // 👈 Z-Index altíssimo
-    elevation: 10,
+    top: 60,
+    padding: 5,
+    zIndex: 9999,
   }
 });

@@ -3,9 +3,9 @@ import { apiRequest } from '../api/client';
 import { SliviState } from '../types/slivi';
 
 
-export async function fetchSliviState(token: string) {
+export async function fetchSliviState() {
 
-  token = await AsyncStorage.getItem('token');
+  const token = await AsyncStorage.getItem("token");
 
 
   return apiRequest<SliviState>('slivi/state', {
@@ -14,4 +14,5 @@ export async function fetchSliviState(token: string) {
       Authorization: `Bearer ${token}`,
     },
   });
+  
 }
