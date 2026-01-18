@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,7 @@ import FoodModal from '@/src/components/foods/foodModal';
 // --- IMPORTS DE SERVIÇOS E DADOS ---
 import { FOOD_IMAGES } from '@/src/components/foods/foodMap';
 import { feedSlivi } from '@/src/services/feedService'; // <--- 1. Importando o serviço
+import { sleepSlivi, wakeSlivi } from '@/src/services/sleepServices';
 import { fetchSliviState } from '@/src/services/sliviService';
 import { Emotion } from '@/src/types/emotions';
 
@@ -26,6 +27,11 @@ const WINDOW_SIZE = width * 0.6;
 const MOUTH_OPEN = require('../assets/images/personagem/mouth/mouth_open.png');
 const MOUTH_CLOSED = require('../assets/images/personagem/mouth/mouth_neutro.png');
 
+const LAMP_ON = require('../assets/images/components/botoes/luz-off.png');
+const LAMP_OFF = require('../assets/images/components/botoes/luz-on.png');
+
+
+
 type Props = {
   token: string;
 }
@@ -33,6 +39,11 @@ type Props = {
 export default function HomeScreen({ token }: Props) {
   const [emotion, setEmotion] = useState<Emotion>('NEUTRO');
   const [loading, setLoading] = useState(true);
+
+  // --- ESTADOS DE LUZ E SONO ---
+  const [isLightOn, setIsLightOn] = useState(true);
+  const [sleepState, setSleepState] = useState<'ACORDADO' | 'SONOLENTO' | 'DORMINDO'>('ACORDADO')
+  const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- ESTADOS DA ANIMAÇÃO ---
   const [foodVisible, setFoodVisible] = useState(false);
@@ -45,6 +56,9 @@ export default function HomeScreen({ token }: Props) {
   const [currentFoodId, setCurrentFoodId] = useState<number | null>(null); // <--- 2. Estado para o ID
   const [foodModalVisible, setFoodModalVisible] = useState(false);
 
+  // Define qual emoção será exibida: A do servidor ou a do ciclo de sono
+  const displayEmotion = sleepState === 'ACORDADO' ? emotion : (sleepState as Emotion);
+
   // Recupera sprites dinamicamente
   const currentSprites = currentFoodKey ? (FOOD_IMAGES as any)[currentFoodKey] : [];
 
@@ -52,10 +66,11 @@ export default function HomeScreen({ token }: Props) {
     loadState();
 
     const intervalId = setInterval(() => {
-      loadState();
+      if (isLightOn) {
+        loadState();
+      }
     }, 60000);
 
-    // 3. Função de limpeza: cancela o intervalo se o usuário sair da tela
     return () => clearInterval(intervalId);
   }, [token]);
 
@@ -69,6 +84,43 @@ export default function HomeScreen({ token }: Props) {
       setLoading(false);
     }
   }
+
+  // --- LÓGICA DA LÂMPADA ---
+  const toggleLight = async () => {
+    if (isLightOn) {
+      // APAGAR A LUZ
+      setIsLightOn(false);
+      setSleepState('SONOLENTO');
+
+      sleepSlivi().catch(err => console.log("Erro ao enviar sleep:", err));
+
+      // Calcula tempo aleatório entre 20s (20000ms) e 30s (30000ms)
+      const timeToSleep = Math.floor(Math.random() * 10000) + 20000;
+
+      // Inicia o timer para dormir profundamente
+      if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+
+      sleepTimerRef.current = setTimeout(() => {
+        setSleepState('DORMINDO');
+      }, timeToSleep);
+
+    } else {
+
+      // ACENDER A LUZ
+      setIsLightOn(true);
+      setSleepState('ACORDADO');
+
+      wakeSlivi().catch(err => console.log("Erro ao enviar wake:", err));
+
+      // Cancela o timer de dormir se ele ainda estiver rodando
+      if (sleepTimerRef.current) {
+        clearTimeout(sleepTimerRef.current);
+        sleepTimerRef.current = null;
+      }
+      // Opcional: Recarregar estado atualizado do servidor ao acordar
+      loadState();
+    }
+  };
 
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -128,14 +180,32 @@ export default function HomeScreen({ token }: Props) {
 
   return (
     <View style={styles.roomWall}>
+      {!isLightOn && (
+        <View style={styles.darkOverlay} pointerEvents="none" />
+      )}
       <View style={styles.headerComponent}>
+        {isLightOn && (
+          <TouchableOpacity
+            style={styles.btnSpawn}
+            onPress={() => setFoodModalVisible(true)}
+          >
+            <Image
+              source={require('../assets/images/components/botoes/elemento-geladeira.png')}
+              style={{ width: 75, height: 75 }}
+            />
+          </TouchableOpacity>
+        )}
+        {/* Botão Lâmpada */}
         <TouchableOpacity
-          style={styles.btnSpawn}
-          onPress={() => setFoodModalVisible(true)}
+          style={styles.btnLamp}
+          onPress={toggleLight}
         >
           <Image
-            source={require('../assets/images/components/botoes/elemento-geladeira.png')}
-            style={{ width: 75, height: 75 }} />
+            // Use uma imagem para ON e outra para OFF se tiver, ou a mesma
+            source={isLightOn ? LAMP_ON : LAMP_OFF}
+            style={{ width: 75, height: 75 }}
+            resizeMode="contain"
+          />
         </TouchableOpacity>
       </View>
       <View style={styles.windowWrapper}>
@@ -190,6 +260,16 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  darkOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'black',
+    opacity: 0.65,
+    zIndex: 20
+  },
   windowWrapper: {
     width: WINDOW_SIZE,
     height: WINDOW_SIZE,
@@ -228,8 +308,10 @@ const styles = StyleSheet.create({
   },
 
   btnSpawn: {
-    top: 60,
     padding: 5,
-    zIndex: 9999,
+  },
+
+  btnLamp: {
+    padding: 5,
   }
 });

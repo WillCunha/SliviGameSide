@@ -4,4 +4,6 @@ export type Emotion =
   | 'ASSUSTADO'
   | 'BRAVO'
   | 'CANSADO'
-  | 'NEUTRO';
+  | 'NEUTRO'
+  | 'SONOLENTO'
+  | 'DORMINDO'
