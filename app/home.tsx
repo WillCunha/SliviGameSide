@@ -42,7 +42,7 @@ export default function HomeScreen({ token }: Props) {
 
   // --- ESTADOS DE LUZ E SONO ---
   const [isLightOn, setIsLightOn] = useState(true);
-  const [sleepState, setSleepState] = useState<'ACORDADO' | 'SONOLENTO' | 'DORMINDO'>('ACORDADO')
+  const [sleepState, setSleepState] = useState<Emotion>('DORMINDO')
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- ESTADOS DA ANIMAÇÃO ---
@@ -57,7 +57,7 @@ export default function HomeScreen({ token }: Props) {
   const [foodModalVisible, setFoodModalVisible] = useState(false);
 
   // Define qual emoção será exibida: A do servidor ou a do ciclo de sono
-  const displayEmotion = sleepState === 'ACORDADO' ? emotion : (sleepState as Emotion);
+  const displayEmotion = sleepState === 'DORMINDO' ? emotion : (sleepState as Emotion);
 
   // Recupera sprites dinamicamente
   const currentSprites = currentFoodKey ? (FOOD_IMAGES as any)[currentFoodKey] : [];
@@ -66,9 +66,7 @@ export default function HomeScreen({ token }: Props) {
     loadState();
 
     const intervalId = setInterval(() => {
-      if (isLightOn) {
-        loadState();
-      }
+      loadState();
     }, 60000);
 
     return () => clearInterval(intervalId);
@@ -78,6 +76,20 @@ export default function HomeScreen({ token }: Props) {
     try {
       const state = await fetchSliviState(token);
       setEmotion(state.emotion);
+      console.log(state);
+
+      if (state.isSleeping) {
+        setIsLightOn(false);
+        setSleepState('DORMINDO');
+      } else {
+        setIsLightOn(true);
+        setSleepState(state.emotion);
+        if (sleepTimerRef.current) {
+          clearTimeout(sleepTimerRef.current);
+          sleepTimerRef.current = null;
+        }
+      }
+
     } catch (err: any) {
       Alert.alert("Erro: ", err.message);
     } finally {
@@ -108,7 +120,7 @@ export default function HomeScreen({ token }: Props) {
 
       // ACENDER A LUZ
       setIsLightOn(true);
-      setSleepState('ACORDADO');
+      setSleepState(emotion);
 
       wakeSlivi().catch(err => console.log("Erro ao enviar wake:", err));
 
@@ -223,7 +235,7 @@ export default function HomeScreen({ token }: Props) {
       </View>
 
       <View style={styles.sliviArea}>
-        <Slivi scale={1} emotion={emotion} mouthOverride={mouthOverride} />
+        <Slivi scale={1} emotion={emotion} eyeEmotion={sleepState} mouthOverride={mouthOverride} />
 
         {foodVisible && currentSprites.length > 0 && (
           <TouchableOpacity

@@ -13,6 +13,7 @@ export const NaturalEyes = ({ emotion, size = 120 }: Props) => {
 
 
   useEffect(() => {
+    console.log("Emoção " + emotion);
     let timeout: number;
 
     const weightedRandom = () => {

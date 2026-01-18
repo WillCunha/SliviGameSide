@@ -41,8 +41,6 @@ export const EYES_BY_EMOTION: Record<Emotion, EyeFrame[]> = {
     { src: require('../../../assets/images/personagem/eyes/olho_normal_esquerdo.png'), weight: 22 },
   ],
 
-  // --- NOVAS EMOÇÕES ---
-  // Dica: Para 'SONOLENTO', use olhos semicerrados.
   SONOLENTO: [
     { src: require('../../../assets/images/personagem/eyes/olho_cansado_centro.png'), weight: 100 },
   ],

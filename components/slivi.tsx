@@ -9,11 +9,11 @@ type Props = {
   scale?: number;
   style?: ViewStyle;
   emotion: Emotion;
-  // 👇 Adicionamos esta prop opcional
+  eyeEmotion: Emotion;
   mouthOverride?: ImageSourcePropType | null; 
 };
 
-export default function Slivi({ scale = 1, style, emotion, mouthOverride }: Props) {
+export default function Slivi({ scale = 1, style, emotion, eyeEmotion, mouthOverride }: Props) {
 
   // ... (mantenha suas constantes de tamanho/posicionamento aqui: bodyWidth, eyesTopOffset, etc.)
   const bodyWidth = 400 * scale;
@@ -45,7 +45,7 @@ export default function Slivi({ scale = 1, style, emotion, mouthOverride }: Prop
             },
           ]}
         >
-          <NaturalEyes size={150} emotion={emotion} />
+          <NaturalEyes size={150} emotion={eyeEmotion} />
         </View>
 
         <View style={[styles.mouthWrap,
