@@ -15,8 +15,9 @@ import Slivi from '@/components/slivi';
 import FoodModal from '@/src/components/foods/foodModal';
 
 // --- IMPORTS DE SERVIÇOS E DADOS ---
+import { syncUserLocation, WeatherState } from '@/src/api/weatherClient';
 import { FOOD_IMAGES } from '@/src/components/foods/foodMap';
-import { feedSlivi } from '@/src/services/feedService'; // <--- 1. Importando o serviço
+import { feedSlivi } from '@/src/services/feedService';
 import { sleepSlivi, wakeSlivi } from '@/src/services/sleepServices';
 import { fetchSliviState } from '@/src/services/sliviService';
 import { Emotion } from '@/src/types/emotions';
@@ -30,15 +31,32 @@ const MOUTH_CLOSED = require('../assets/images/personagem/mouth/mouth_neutro.png
 const LAMP_ON = require('../assets/images/components/botoes/luz-off.png');
 const LAMP_OFF = require('../assets/images/components/botoes/luz-on.png');
 
+const WEATHER_IMAGES = {
+  sun: require('../assets/images/weather/clean_sky.png'),
+  rain: require('../assets/images/weather/rain_storm.png'),
+  cloudy: require('../assets/images/weather/rain_storm.png'),
+  night: require('../assets/images/weather/night_sky.png')
+};
+
 
 
 type Props = {
   token: string;
+  userId: number
 }
 
-export default function HomeScreen({ token }: Props) {
+export default function HomeScreen({ token, userId }: Props) {
+
+  // --- ESTADOS DO JOGO ---
   const [emotion, setEmotion] = useState<Emotion>('NEUTRO');
   const [loading, setLoading] = useState(true);
+
+  // --- ESTADOS DE CLIMA (NOVO) ---
+  const [weather, setWeather] = useState<WeatherState>({
+    condition: 'sun', // Padrão seguro
+    temp: 25,
+    is_day: true
+  });
 
   // --- ESTADOS DE LUZ E SONO ---
   const [isLightOn, setIsLightOn] = useState(true);
@@ -63,7 +81,7 @@ export default function HomeScreen({ token }: Props) {
   const currentSprites = currentFoodKey ? (FOOD_IMAGES as any)[currentFoodKey] : [];
 
   useEffect(() => {
-    loadState();
+    loadGameData();
 
     const intervalId = setInterval(() => {
       loadState();
@@ -72,6 +90,26 @@ export default function HomeScreen({ token }: Props) {
     return () => clearInterval(intervalId);
   }, [token]);
 
+
+  // Função Wrapper para carregar tudo (Slivi + Clima)
+  async function loadGameData() {
+    setLoading(true);
+    await loadState(); // Carrega Slivi
+    await loadWeather(); // Carrega Clima
+    setLoading(false);
+  }
+
+
+  // --- FUNÇÃO PARA CARREGAR CLIMA ---
+  async function loadWeather() {
+    const weatherData = await syncUserLocation(userId || 1);
+
+    if (weatherData) {
+      setWeather(weatherData);
+    }
+  }
+
+  // --- FUNÇÃO PARA CARREGAR OS STATUS DO SLIVI ---
   async function loadState() {
     try {
       const state = await fetchSliviState(token);
@@ -190,6 +228,10 @@ export default function HomeScreen({ token }: Props) {
 
   if (loading) return <ActivityIndicator size="large" />;
 
+  // Seleciona a imagem de fundo com base no estado 'condition'
+  // Fallback para 'sun' se algo der errado
+  const currentBgImage = WEATHER_IMAGES[weather.condition] || WEATHER_IMAGES.sun;
+
   return (
     <View style={styles.roomWall}>
       {!isLightOn && (
@@ -203,7 +245,7 @@ export default function HomeScreen({ token }: Props) {
           >
             <Image
               source={require('../assets/images/components/botoes/elemento-geladeira.png')}
-              style={{ width: 75, height: 75 }}
+              style={{ width: 65, height: 65 }}
             />
           </TouchableOpacity>
         )}
@@ -215,18 +257,22 @@ export default function HomeScreen({ token }: Props) {
           <Image
             // Use uma imagem para ON e outra para OFF se tiver, ou a mesma
             source={isLightOn ? LAMP_ON : LAMP_OFF}
-            style={{ width: 75, height: 75 }}
+            style={{ width: 65, height: 65 }}
             resizeMode="contain"
           />
         </TouchableOpacity>
       </View>
       <View style={styles.windowWrapper}>
         <Image
-          source={require('../assets/images/weather/rain_storm.png')}
+          source={currentBgImage}
           style={styles.skyBackground}
           resizeMode='stretch'
         />
-        <View style={styles.weatherLayer}><RainAnimation /></View>
+        {weather.condition === 'rain' && (
+          <View style={styles.weatherLayer}>
+            <RainAnimation />
+          </View>
+        )}
         <Image
           source={require('../assets/images/components/windows/normal_window_gameV2.png')}
           resizeMode='stretch'
@@ -315,15 +361,14 @@ const styles = StyleSheet.create({
   },
 
   headerComponent: {
+    top: 40,
+    right: 35,
+    position: 'absolute',
     minHeight: 50,
     maxHeight: 50,
+    width: '20%',
+    display: 'flex',
+    flexDirection: 'row',
+    marginBottom: '30%',
   },
-
-  btnSpawn: {
-    padding: 5,
-  },
-
-  btnLamp: {
-    padding: 5,
-  }
 });
