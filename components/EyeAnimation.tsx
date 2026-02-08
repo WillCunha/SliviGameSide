@@ -1,14 +1,15 @@
+import { Emotion } from "@/src/types/emotions";
 import { useEffect, useState } from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { EYES_BY_EMOTION } from '../src/components/slivi/eyesMap';
 
 type Props = {
-  emotion: keyof typeof EYES_BY_EMOTION;
+  emotion?: Emotion;
   size?: number;
 };
 
-export const NaturalEyes = ({ emotion, size = 120 }: Props) => {
-  const EYES = EYES_BY_EMOTION[emotion] ?? EYES_BY_EMOTION.FELIZ;
+export const NaturalEyes = ({ emotion = 'FELIZ', size = 120 }: Props) => {
+  const EYES = (EYES_BY_EMOTION as any)[emotion] ?? EYES_BY_EMOTION.FELIZ;
   const [currentIndex, setCurrentIndex] = useState(0);
 
 
@@ -17,7 +18,7 @@ export const NaturalEyes = ({ emotion, size = 120 }: Props) => {
     let timeout: number;
 
     const weightedRandom = () => {
-      const total = EYES.reduce((acc, e) => acc + e.weight, 0);
+      const total = EYES.reduce((acc: number, e: any) => acc + e.weight, 0);
       const rand = Math.random() * total;
       let sum = 0;
 

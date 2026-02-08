@@ -5,6 +5,7 @@ import {
   Dimensions,
   Image,
   StyleSheet,
+  Text,
   TouchableOpacity,
   View
 } from 'react-native';
@@ -21,6 +22,7 @@ import { feedSlivi } from '@/src/services/feedService';
 import { sleepSlivi, wakeSlivi } from '@/src/services/sleepServices';
 import { fetchSliviState } from '@/src/services/sliviService';
 import { Emotion } from '@/src/types/emotions';
+import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 const WINDOW_SIZE = width * 0.6;
@@ -240,7 +242,6 @@ export default function HomeScreen({ token, userId }: Props) {
       <View style={styles.headerComponent}>
         {isLightOn && (
           <TouchableOpacity
-            style={styles.btnSpawn}
             onPress={() => setFoodModalVisible(true)}
           >
             <Image
@@ -251,7 +252,6 @@ export default function HomeScreen({ token, userId }: Props) {
         )}
         {/* Botão Lâmpada */}
         <TouchableOpacity
-          style={styles.btnLamp}
           onPress={toggleLight}
         >
           <Image
@@ -281,7 +281,7 @@ export default function HomeScreen({ token, userId }: Props) {
       </View>
 
       <View style={styles.sliviArea}>
-        <Slivi scale={1} emotion={emotion} eyeEmotion={sleepState} mouthOverride={mouthOverride} />
+        <Slivi scale={1} size={600} emotion={emotion} eyeEmotion={sleepState} mouthOverride={mouthOverride} />
 
         {foodVisible && currentSprites.length > 0 && (
           <TouchableOpacity
@@ -296,6 +296,17 @@ export default function HomeScreen({ token, userId }: Props) {
             />
           </TouchableOpacity>
         )}
+
+      <TouchableOpacity onPress={() => router.push({
+        pathname: './games/SliviPulse',
+        params: {
+          emotion: emotion,
+        }
+      })} >
+        <Text>Jogar Slivi Pulse</Text>
+      </TouchableOpacity>
+
+
       </View>
 
 
@@ -305,7 +316,10 @@ export default function HomeScreen({ token, userId }: Props) {
         onClose={() => setFoodModalVisible(false)}
         onSelectFood={(food) => startEatingAnimation(food)}
       />
+
+
     </View>
+
   );
 }
 
@@ -342,7 +356,7 @@ const styles = StyleSheet.create({
 
   sliviArea: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 10,
     zIndex: 10,
     alignItems: 'center',
     justifyContent: 'center',
@@ -352,7 +366,7 @@ const styles = StyleSheet.create({
   foodTouch: {
     position: 'absolute',
     right: 100,
-    top: 190,
+    bottom: 140,
     backgroundColor: 'transparent'
   },
   foodImg: {
