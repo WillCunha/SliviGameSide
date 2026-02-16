@@ -1,5 +1,5 @@
-import { sendGameScore } from '@/src/services/gameService';
 import { Emotion } from '@/src/types/emotions';
+import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -15,18 +15,36 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /* ================= CONFIG ================= */
 const GRAVITY = 0.6;
-const IMPULSE = -1.2;
-
+const MAX_VELOCITY = 15;
 const SLIVI_SIZE = 40;
 const SLIVI_X = 80;
 const BOX_SIZE = 50;
+const MAX_MISTAKES = 5;
 
-// Configuração das novas regras
-const MAX_MISTAKES = 5; // Game Over ao atingir 5 erros
-const ANGRY_THRESHOLD = 2; // Fica bravo após 2 erros
+// Configuração do "Mood Meter" (0 a 100)
+const MOOD_THRESHOLDS = {
+  FUN: 90,
+  FELIZ: 75,
+  CALMO: 50,
+  TRISTE: 30,
+  BRAVO: 15,
+  NERVOSO: 0
+};
+
+// Cores
+const COLORS = {
+  POSITIVE: '#4dff88',
+  NEGATIVE: '#ff4d4d',
+  BONUS: '#ffd700',
+  MAGNET: '#3b82f6',
+  GHOST: '#a855f7',
+  SKY_BG: '#87CEEB', // Azul Céu
+  FEVER_BG: '#1a0b2e', // Roxo Escuro
+  CLOUD: 'rgba(255, 255, 255, 0.6)',
+};
 
 /* ================= TYPES ================= */
-type BoxType = 'POSITIVE' | 'NEGATIVE' | 'BONUS';
+type BoxType = 'POSITIVE' | 'NEGATIVE' | 'BONUS' | 'MAGNET' | 'GHOST';
 
 type GameBox = {
   id: number;
@@ -34,6 +52,9 @@ type GameBox = {
   y: number;
   type: BoxType;
   basePoints?: number;
+  oscillate?: boolean;
+  initialY?: number;
+  offset?: number;
 };
 
 type FloatingText = {
@@ -46,33 +67,63 @@ type FloatingText = {
   opacity: Animated.Value;
 };
 
+type Particle = {
+  id: string;
+  x: Animated.Value;
+  y: Animated.Value;
+  color: string;
+  opacity: Animated.Value;
+};
+
+type Cloud = {
+  id: number;
+  x: Animated.Value;
+  y: number;
+  scale: number;
+  speed: number;
+  width: number;
+};
+
 type Props = {
   emotion: Emotion;
 };
 
 /* ================= HELPERS ================= */
+function getInitialMood(emotion: Emotion): number {
+  switch (emotion) {
+    case 'FUN': return 95;
+    case 'FELIZ': return 80;
+    case 'CALMO': return 60;
+    case 'TRISTE': return 35;
+    case 'BRAVO': return 20;
+    case 'NERVOSO': return 5;
+    default: return 60;
+  }
+}
+
+function getEmotionFromMood(mood: number): Emotion {
+  if (mood >= MOOD_THRESHOLDS.FUN) return 'FUN';
+  if (mood >= MOOD_THRESHOLDS.FELIZ) return 'FELIZ';
+  if (mood >= MOOD_THRESHOLDS.CALMO) return 'CALMO';
+  if (mood >= MOOD_THRESHOLDS.TRISTE) return 'TRISTE';
+  if (mood >= MOOD_THRESHOLDS.BRAVO) return 'BRAVO';
+  return 'NERVOSO';
+}
+
 function emotionMultiplier(emotion: Emotion): number {
   switch (emotion) {
     case 'FUN': return 2;
     case 'FELIZ': return 1.5;
     case 'CALMO': return 1;
-    case 'TRISTE': return 0.7;
-    case 'NERVOSO': return 0.5;
+    case 'TRISTE': return 0.8;
     case 'BRAVO': return 0.5;
+    case 'NERVOSO': return 0.2;
     default: return 1;
   }
 }
 
 function emotionLabel(emotion: Emotion): string {
-  switch (emotion) {
-    case 'FUN': return 'DIVERTIDO';
-    case 'FELIZ': return 'FELIZ';
-    case 'CALMO': return 'CALMO';
-    case 'TRISTE': return 'TRISTE';
-    case 'BRAVO': return 'BRAVO';
-    case 'NERVOSO': return 'NERVOSO';
-    default: return 'NEUTRO';
-  }
+  return emotion; // Simplificado para retornar a string direta
 }
 
 function clamp(val: number, min: number, max: number) {
@@ -81,416 +132,597 @@ function clamp(val: number, min: number, max: number) {
 
 /* ================= COMPONENT ================= */
 export default function SliviPulse({ emotion }: Props) {
+  // Refs
   const y = useRef(SCREEN_HEIGHT / 2);
   const velocity = useRef(0);
   const pressing = useRef(false);
+  const time = useRef(0);
+  const shakeAnim = useRef(new Animated.Value(0)).current;
+  const bgAnim = useRef(new Animated.Value(0)).current; // 0 = Sky, 1 = Fever
 
+  // Estados Principais
   const [started, setStarted] = useState(false);
   const [gameOver, setGameOver] = useState(false);
 
-  // Estados novos para lógica de vida e emoção dinâmica
-  const [currentEmotion, setCurrentEmotion] = useState<Emotion>(emotion);
-  const [mistakes, setMistakes] = useState(0);
+  // Sistema de Emoção Balanceada
+  const [moodValue, setMoodValue] = useState(getInitialMood(emotion));
+  const currentEmotion = getEmotionFromMood(moodValue);
 
-  const [boxes, setBoxes] = useState<GameBox[]>([]);
+  // Stats
   const [score, setScore] = useState(0);
-
   const [combo, setCombo] = useState(0);
+  const [mistakes, setMistakes] = useState(0);
   const [multiplier, setMultiplier] = useState(1);
 
-  const [speed, setSpeed] = useState(3);
-  const [difficultyLevel, setDifficultyLevel] = useState(0);
-
+  // Entidades
+  const [boxes, setBoxes] = useState<GameBox[]>([]);
+  const [clouds, setClouds] = useState<Cloud[]>([]);
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
+  const [particles, setParticles] = useState<Particle[]>([]);
 
+  // Game Logic
+  const [speed, setSpeed] = useState(4);
+  const [difficultyLevel, setDifficultyLevel] = useState(0);
+  const [magnetActive, setMagnetActive] = useState(false);
   const startTime = useRef<number | null>(null);
 
-  /* ================= GAME LOOP ================= */
+  const isFever = combo >= 10;
+
+  /* ================= INIT CLOUDS ================= */
+  useEffect(() => {
+    // Gerar nuvens iniciais
+    const initialClouds = Array.from({ length: 5 }).map((_, i) => ({
+      id: i,
+      x: new Animated.Value(Math.random() * SCREEN_WIDTH),
+      y: Math.random() * (SCREEN_HEIGHT / 2),
+      scale: 0.5 + Math.random() * 0.8,
+      speed: 0.5 + Math.random() * 1.5,
+      width: 60 + Math.random() * 60,
+    }));
+    setClouds(initialClouds);
+  }, []);
+
+  /* ================= BACKGROUND & CLOUD LOOP ================= */
+  useEffect(() => {
+    Animated.timing(bgAnim, {
+      toValue: isFever ? 1 : 0,
+      duration: 800,
+      useNativeDriver: false,
+    }).start();
+
+    // Loop de animação das nuvens (independente do pause do jogo para dar vida ao menu)
+    const cloudLoop = setInterval(() => {
+      clouds.forEach(c => {
+        // Move a nuvem
+        let nextX = (c.x as any)._value - c.speed;
+        if (nextX < -150) {
+          nextX = SCREEN_WIDTH + 50; // Reseta pro outro lado
+        }
+        c.x.setValue(nextX);
+      });
+    }, 16);
+
+    return () => clearInterval(cloudLoop);
+  }, [isFever, clouds]);
+
+
+  /* ================= GAME PHYSICS LOOP ================= */
   useEffect(() => {
     if (!started || gameOver) return;
 
     const loop = setInterval(() => {
-      if (pressing.current) velocity.current += IMPULSE;
+      time.current += 0.1;
 
+      // Slivi
+      if (pressing.current) velocity.current += -1.5;
       velocity.current += GRAVITY;
+      velocity.current = clamp(velocity.current, -MAX_VELOCITY, MAX_VELOCITY);
       y.current += velocity.current;
 
       if (y.current < -SLIVI_SIZE || y.current > SCREEN_HEIGHT) {
-        setGameOver(true);
+        handleGameOver();
         return;
       }
 
+      // Boxes
       setBoxes(prev =>
         prev
-          .map(b => ({ ...b, x: b.x - speed }))
-          .filter(b => b.x > -BOX_SIZE)
+          .map(b => {
+            let nextX = b.x - speed;
+            let nextY = b.y;
+
+            if (b.oscillate && b.initialY) {
+              nextY = b.initialY + Math.sin(time.current + b.offset!) * 80;
+            }
+
+            if (magnetActive && (b.type === 'POSITIVE' || b.type === 'BONUS' || b.type === 'GHOST')) {
+              const dx = SLIVI_X - nextX;
+              const dy = y.current - nextY;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+
+              if (dist < 400) {
+                nextX += dx * 0.08;
+                nextY += dy * 0.08;
+              }
+            }
+
+            return { ...b, x: nextX, y: nextY };
+          })
+          .filter(b => b.x > -BOX_SIZE * 2)
       );
     }, 16);
 
     return () => clearInterval(loop);
-  }, [started, gameOver, speed]);
+  }, [started, gameOver, speed, magnetActive]);
 
   /* ================= DIFFICULTY ================= */
   useEffect(() => {
     if (!started || gameOver) return;
-
     const prog = setInterval(() => {
-      setSpeed(s => clamp(s + 0.3, 3, 8));
+      setSpeed(s => clamp(s + 0.2, 4, 11));
       setDifficultyLevel(d => d + 1);
     }, 5000);
-
     return () => clearInterval(prog);
   }, [started, gameOver]);
 
   /* ================= SPAWN ================= */
   useEffect(() => {
     if (!started || gameOver) return;
-
-    const spawnDelay = clamp(1400 - difficultyLevel * 80, 600, 1400);
+    const spawnDelay = clamp(1200 - difficultyLevel * 60, 500, 1200);
 
     const spawn = setInterval(() => {
-      const wave = difficultyLevel > 4 ? 2 : 1;
+      const waveSize = isFever ? 3 : (difficultyLevel > 5 ? 2 : 1);
 
-      for (let i = 0; i < wave; i++) {
+      for (let i = 0; i < waveSize; i++) {
         const r = Math.random();
         let type: BoxType = 'POSITIVE';
+        let oscillate = false;
 
-        if (difficultyLevel < 2) {
-          if (r > 0.65) type = 'NEGATIVE';
-        } else if (difficultyLevel < 6) {
-          if (r > 0.45) type = 'NEGATIVE';
-          if (r < 0.1) type = 'BONUS';
+        if (isFever) {
+          if (r > 0.8) type = 'BONUS';
+          else if (r > 0.95) type = 'MAGNET';
+          else type = 'POSITIVE';
         } else {
-          if (r > 0.25) type = 'NEGATIVE';
-          if (r < 0.1) type = 'BONUS';
+          if (difficultyLevel < 2) {
+            if (r > 0.7) type = 'NEGATIVE';
+          } else if (difficultyLevel < 6) {
+            if (r > 0.5) type = 'NEGATIVE';
+            if (r < 0.1) type = 'BONUS';
+            if (r > 0.95) type = 'MAGNET';
+          } else {
+            if (r > 0.3) type = 'NEGATIVE';
+            if (r < 0.15) type = 'GHOST';
+            if (r > 0.9 && r < 0.95) type = 'MAGNET';
+            if (Math.random() > 0.7) oscillate = true;
+          }
         }
 
+        const spawnY = Math.random() * (SCREEN_HEIGHT - 200) + 100;
         setBoxes(prev => [
           ...prev,
           {
             id: Date.now() + Math.random(),
-            x: SCREEN_WIDTH + i * (BOX_SIZE + 20),
-            y: Math.random() * (SCREEN_HEIGHT - 200) + 100,
+            x: SCREEN_WIDTH + i * (BOX_SIZE + 40),
+            y: spawnY,
+            initialY: spawnY,
             type,
-            basePoints:
-              type === 'POSITIVE'
-                ? 10 + Math.floor(Math.random() * 5)
-                : undefined,
+            oscillate,
+            offset: Math.random() * 10,
+            basePoints: type === 'POSITIVE' ? 10 : type === 'GHOST' ? 50 : 0,
           },
         ]);
       }
     }, spawnDelay);
-
     return () => clearInterval(spawn);
-  }, [started, gameOver, difficultyLevel]);
+  }, [started, gameOver, difficultyLevel, isFever]);
 
   /* ================= COLLISION ================= */
-  // Adicionamos currentEmotion e mistakes nas dependências para garantir estado atualizado
   useEffect(() => {
     if (!started || gameOver) return;
-
     boxes.forEach(box => {
-      const hitX =
-        box.x < SLIVI_X + SLIVI_SIZE &&
-        box.x + BOX_SIZE > SLIVI_X;
-
-      const hitY =
-        box.y < y.current + SLIVI_SIZE &&
-        box.y + BOX_SIZE > y.current;
-
+      const hitX = box.x < SLIVI_X + SLIVI_SIZE - 5 && box.x + BOX_SIZE > SLIVI_X + 5;
+      const hitY = box.y < y.current + SLIVI_SIZE - 5 && box.y + BOX_SIZE > y.current + 5;
       if (hitX && hitY) resolveBox(box);
     });
-  }, [boxes, currentEmotion, mistakes]);
+  }, [boxes, mistakes, magnetActive, isFever]);
 
   function resolveBox(box: GameBox) {
     setBoxes(prev => prev.filter(b => b.id !== box.id));
+    spawnParticles(box.x, box.y, getBoxColor(box.type));
 
-    if (box.type === 'POSITIVE' && box.basePoints) handlePositive(box);
-    
-    // Lógica alterada para Negative
-    if (box.type === 'NEGATIVE') handleNegative(box);
-    
-    if (box.type === 'BONUS') handleBonus(box);
+    switch (box.type) {
+      case 'POSITIVE': handlePositive(box); break;
+      case 'GHOST': handlePositive(box); break;
+      case 'NEGATIVE': handleNegative(box); break;
+      case 'BONUS': handleBonus(box); break;
+      case 'MAGNET': handleMagnet(box); break;
+    }
   }
 
-  /* ================= HANDLERS ================= */
+  /* ================= HANDLERS MOOD & SCORE ================= */
+  function updateMood(amount: number) {
+    setMoodValue(prev => clamp(prev + amount, 0, 100));
+  }
+
   function handlePositive(box: GameBox) {
-    const nextCombo = Math.min(combo + 1, 5);
-    // Usa currentEmotion para o cálculo
+    const nextCombo = combo + 1;
+    setCombo(nextCombo);
+    updateMood(4); // Pequeno boost de felicidade
+
+    const feverMult = isFever ? 2 : 1;
+    const base = box.basePoints || 10;
+
+    // Usa currentEmotion (derivado do moodValue)
     const finalPoints = Math.round(
-      box.basePoints! *
+      base *
       emotionMultiplier(currentEmotion) *
-      (1 + nextCombo * 0.2) *
-      multiplier
+      (1 + nextCombo * 0.1) *
+      multiplier *
+      feverMult
     );
 
     setScore(s => s + finalPoints);
-    setCombo(nextCombo);
-
-    spawnFloatingText(box.x, box.y, `+${finalPoints}`, '#4dff88');
+    spawnFloatingText(box.x, box.y, `+${finalPoints}`, COLORS.POSITIVE);
   }
 
   function handleNegative(box: GameBox) {
+    if (isFever) return;
+
+    triggerShake();
     setCombo(0);
-    const newMistakes = mistakes + 1;
-    setMistakes(newMistakes);
+    setMistakes(m => m + 1);
+    updateMood(-20); // Dano grande no humor
 
-    spawnFloatingText(box.x, box.y, 'DANO!', '#ff4d4d');
+    spawnFloatingText(box.x, box.y, 'DANO!', COLORS.NEGATIVE);
 
-    // Regra 1: Mudar emoção se pegar X caixas ruins
-    if (newMistakes >= ANGRY_THRESHOLD && currentEmotion !== 'BRAVO') {
-      setCurrentEmotion('BRAVO');
-      spawnFloatingText(SLIVI_X, y.current - 40, 'GRRR!', '#ff4d4d');
-    }
-
-    // Regra 2: Game Over se exceder limite
-    if (newMistakes >= MAX_MISTAKES) {
-      setGameOver(true);
+    if (mistakes + 1 >= MAX_MISTAKES) {
+      handleGameOver();
     }
   }
 
   function handleBonus(box: GameBox) {
-    setScore(s => s + 50);
-    spawnFloatingText(box.x, box.y, '+50', '#ffd700');
-
-    setMultiplier(2);
-    spawnFloatingText(SLIVI_X, y.current - 20, 'x2', '#ffd700');
-
-    setTimeout(() => setMultiplier(1), 5000);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setScore(s => s + 100);
+    setCombo(c => c + 2);
+    updateMood(10); // Grande boost de felicidade
+    spawnFloatingText(box.x, box.y, 'BONUS!', COLORS.BONUS);
   }
 
-  /* ================= FLOATING ================= */
-  function spawnFloatingText(
-    x: number,
-    y: number,
-    text: string,
-    color: string
-  ) {
+  function handleMagnet(box: GameBox) {
+    setMagnetActive(true);
+    spawnFloatingText(box.x, box.y, 'MAGNETIC!', COLORS.MAGNET);
+    updateMood(5);
+    setTimeout(() => setMagnetActive(false), 5000);
+  }
+
+  async function handleGameOver() {
+    setGameOver(true);
+    triggerShake();
+    updateMood(-100);
+  }
+
+  /* ================= VISUALS ================= */
+  function triggerShake() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    shakeAnim.setValue(0);
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 40, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 40, useNativeDriver: true }),
+    ]).start();
+  }
+
+
+  function spawnParticles(x: number, y: number, color: string) {
+    const newParticles: Particle[] = Array.from({ length: 6 }).map((_, i) => ({
+      id: Math.random().toString(),
+      x: new Animated.Value(x + BOX_SIZE / 2),
+      y: new Animated.Value(y + BOX_SIZE / 2),
+      opacity: new Animated.Value(1),
+      color
+    }));
+
+    setParticles(prev => [...prev, ...newParticles]);
+
+    newParticles.forEach(p => {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 50 + Math.random() * 50;
+
+      Animated.parallel([
+        Animated.timing(p.x, {
+          toValue: (p.x as any)._value + Math.cos(angle) * dist,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(p.y, {
+          toValue: (p.y as any)._value + Math.sin(angle) * dist,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(p.opacity, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        })
+      ]).start(() => setParticles(prev => prev.filter(item => item.id !== p.id)));
+    });
+  }
+
+  function spawnFloatingText(x: number, y: number, text: string, color: string) {
     const id = Date.now() + Math.random();
     const translateY = new Animated.Value(0);
     const opacity = new Animated.Value(1);
 
-    setFloatingTexts(prev => [
-      ...prev,
-      { id, x, y, text, color, translateY, opacity },
-    ]);
+    setFloatingTexts(prev => [...prev, { id, x, y, text, color, translateY, opacity }]);
 
     Animated.parallel([
-      Animated.timing(translateY, {
-        toValue: -40,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setFloatingTexts(prev => prev.filter(t => t.id !== id));
-    });
+      Animated.timing(translateY, { toValue: -60, duration: 800, useNativeDriver: true }),
+      Animated.timing(opacity, { toValue: 0, duration: 800, useNativeDriver: true }),
+    ]).start(() => setFloatingTexts(prev => prev.filter(t => t.id !== id)));
   }
 
-  /* ================= INPUT ================= */
-  function pressIn() {
-    if (gameOver) return;
-    if (!started) {
-      setStarted(true);
-      startTime.current = Date.now();
-    }
-    pressing.current = true;
-  }
-
-  function pressOut() {
-    pressing.current = false;
-  }
-
-  /* ================= GAME OVER ================= */
-  useEffect(() => {
-    if (gameOver && started && startTime.current) {
-      const game = "SLIVI_PULSE";
-      const duration = Math.round(
-        (Date.now() - startTime.current) / 1000
-      );
-      sendGameScore(game, score, duration);
-    }
-  }, [gameOver]);
-
+  /* ================= RESTART ================= */
   function restart() {
     setStarted(false);
     setGameOver(false);
     setScore(0);
     setCombo(0);
     setMultiplier(1);
-    setSpeed(3);
+    setSpeed(4);
     setDifficultyLevel(0);
-    
-    // Resetar novos estados
     setMistakes(0);
-    setCurrentEmotion(emotion); // Volta para a emoção original
-    
+
+    // Reseta mood
+    setMoodValue(getInitialMood(emotion));
+
     setBoxes([]);
     setFloatingTexts([]);
+    setParticles([]);
+    setMagnetActive(false);
     y.current = SCREEN_HEIGHT / 2;
     velocity.current = 0;
     startTime.current = null;
   }
 
+  function getBoxColor(type: BoxType) { return COLORS[type] || '#fff'; }
+
   /* ================= RENDER ================= */
+  const backgroundColor = bgAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [COLORS.SKY_BG, COLORS.FEVER_BG]
+  });
+
+  // Interpolação para escurecer as nuvens no modo Fever
+  const cloudOpacity = bgAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.2] // Nuvens quase somem no Fever
+  });
+
   return (
     <Pressable
-      style={styles.container}
-      onPressIn={pressIn}
-      onPressOut={pressOut}
+      style={{ flex: 1 }}
+      onPressIn={() => {
+        if (gameOver) return;
+        if (!started) { setStarted(true); startTime.current = Date.now(); }
+        pressing.current = true;
+      }}
+      onPressOut={() => pressing.current = false}
       onPress={gameOver ? restart : undefined}
     >
-      {/* HUD EMOÇÃO & VIDAS */}
-      <View style={styles.hudEmotion}>
-        <Text style={styles.hudText}>
-          Emoção Atual: {emotionLabel(currentEmotion)} x{emotionMultiplier(currentEmotion)}
-        </Text>
-        {/* Barra de vida simples */}
-        <Text style={[styles.hudText, { color: '#ff4d4d', marginTop: 4 }]}>
-          Vidas: {'❤️'.repeat(Math.max(0, MAX_MISTAKES - mistakes))}
-        </Text>
-      </View>
+      <Animated.View style={[styles.container, {
+        backgroundColor,
+        transform: [{ translateX: shakeAnim }]
+      }]}>
 
-      {/* Renderiza o Slivi com a currentEmotion dinâmica */}
-      <View
-        style={{
+        {/* === NUVENS (BACKGROUND LAYER) === */}
+        {clouds.map(c => (
+          <Animated.View
+            key={c.id}
+            style={[
+              styles.cloud,
+              {
+                left: c.x,
+                top: c.y,
+                width: c.width,
+                opacity: cloudOpacity, // Some no Fever Mode
+                transform: [
+                  { translateX: c.x }, // O valor animado deve entrar aqui
+                  { scale: c.scale }
+                ]
+              }
+            ]}
+          >
+            {/* Shapes para formar a nuvem */}
+            <View style={styles.cloudBubbleMain} />
+            <View style={[styles.cloudBubble, { left: -15, top: 10 }]} />
+            <View style={[styles.cloudBubble, { right: -15, top: 10 }]} />
+          </Animated.View>
+        ))}
+
+        {/* === EFEITOS DE FEVER === */}
+        {isFever && <View style={styles.feverOverlay} />}
+
+        {/* === HUD === */}
+        <View style={styles.hudTop}>
+          <View>
+            <Text style={styles.hudText}>
+              Emoção Atual: {emotionLabel(currentEmotion)} (x{emotionMultiplier(currentEmotion)})
+            </Text>
+            {/* Barra de Vida */}
+            <View style={{ flexDirection: 'row', marginTop: 4 }}>
+              {Array.from({ length: MAX_MISTAKES }).map((_, i) => (
+                <Text key={i} style={{ opacity: i < (MAX_MISTAKES - mistakes) ? 1 : 0.2 }}>❤️</Text>
+              ))}
+            </View>
+            {/* Opcional: Barra de Humor Debug */}
+            {/* <View style={{width: 100, height: 4, backgroundColor: 'rgba(0,0,0,0.2)', marginTop: 5}}>
+                <View style={{width: moodValue, height: 4, backgroundColor: '#fff'}} />
+            </View> */}
+          </View>
+
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={[styles.score, { color: isFever ? COLORS.BONUS : '#fff' }]}>
+              {score}
+            </Text>
+            {isFever && <Text style={styles.feverText}>FEVER MODE!</Text>}
+            {magnetActive && <Text style={styles.magnetText}>MAGNET ON</Text>}
+          </View>
+        </View>
+
+        {/* === SLIVI === */}
+        <View style={{
           position: 'absolute',
-          top: y.current,
-          left: SLIVI_X,
-          width: SLIVI_SIZE,
-          height: SLIVI_SIZE,
-        }}
-      >
-        <Slivi emotion={currentEmotion} size={300} />
-      </View>
+          top: y.current, left: SLIVI_X,
+          width: SLIVI_SIZE, height: SLIVI_SIZE,
+        }}>
+          {isFever && <View style={styles.aura} />}
+          <Slivi emotion={currentEmotion} size={300} />
+        </View>
 
-      {boxes.map(box => (
-        <View
-          key={box.id}
-          style={[
+        {/* === PARTICLES === */}
+        {particles.map(p => (
+          <Animated.View key={p.id} style={[styles.particle, {
+            backgroundColor: p.color, opacity: p.opacity,
+            transform: [{ translateX: p.x }, { translateY: p.y }]
+          }]} />
+        ))}
+
+        {/* === BOXES === */}
+        {boxes.map(box => (
+          <View key={box.id} style={[
             styles.box,
             {
-              left: box.x,
-              top: box.y,
-              backgroundColor:
-                box.type === 'POSITIVE'
-                  ? '#4dff88'
-                  : box.type === 'NEGATIVE'
-                    ? '#ff4d4d'
-                    : '#ffd700',
+              left: box.x, top: box.y,
+              backgroundColor: getBoxColor(box.type),
+              opacity: box.type === 'GHOST' ? 0.3 : 1,
+              borderColor: box.type === 'GHOST' ? '#fff' : 'transparent',
+              borderWidth: box.type === 'GHOST' ? 1 : 0,
+              shadowOpacity: box.type === 'MAGNET' ? 1 : 0,
+              elevation: box.type === 'MAGNET' ? 10 : 0,
             },
           ]}
-        >
-          {box.type === 'POSITIVE' && (
-            <Text style={styles.boxText}>
-              +{box.basePoints}
-            </Text>
-          )}
-        </View>
-      ))}
+          >
+            {box.type === 'POSITIVE' && <Text style={styles.boxText}>+{box.basePoints}</Text>}
+            {box.type === 'BONUS' && <Text style={styles.boxText}>★</Text>}
+            {box.type === 'MAGNET' && <Text style={styles.boxText}>🧲</Text>}
+            {box.type === 'GHOST' && <Text style={styles.boxText}>👻</Text>}
+            {box.type === 'NEGATIVE' && <Text style={styles.boxText}>X</Text>}
+          </View>
+        ))}
 
-      {floatingTexts.map(t => (
-        <Animated.Text
-          key={t.id}
-          style={{
-            position: 'absolute',
-            left: t.x,
-            top: t.y,
-            color: t.color,
-            fontSize: 18,
-            fontWeight: 'bold',
-            opacity: t.opacity,
+        {/* === FLOATING TEXTS === */}
+        {floatingTexts.map(t => (
+          <Animated.Text key={t.id} style={[styles.floatingText, {
+            left: t.x, top: t.y, color: t.color, opacity: t.opacity,
             transform: [{ translateY: t.translateY }],
-          }}
-        >
-          {t.text}
-        </Animated.Text>
-      ))}
+          }]}>{t.text}</Animated.Text>
+        ))}
 
-      <View style={styles.hudPontos}>
-        <Text style={styles.score}>Pontos: {score}</Text>
-      </View>
+        {/* === OVERLAYS === */}
+        {!started && (
+          <View style={styles.centerOverlay}>
+            <Text style={styles.overlayTitle}>Slivi Pulse</Text>
+            <Text style={styles.overlaySubtitle}>Toque para pular</Text>
+          </View>
+        )}
 
-
-      {!started && (
-        <Text style={styles.overlay}>Toque para começar</Text>
-      )}
-
-      {gameOver && (
-        <View style={{ position: 'absolute', top: '40%', alignSelf: 'center', alignItems: 'center' }}>
-          <Text style={[styles.overlay, { position: 'relative', top: 0 }]}>
-            Game Over
-          </Text>
-          <Text style={{ color: '#ff4d4d', fontSize: 16, fontWeight: 'bold', marginBottom: 10 }}>
-            {mistakes >= MAX_MISTAKES ? 'Muitos erros!' : 'Caiu no vazio!'}
-          </Text>
-          <Text style={{ color: '#fff', fontSize: 16 }}>Toque para reiniciar</Text>
-        </View>
-      )}
+        {gameOver && (
+          <View style={styles.centerOverlay}>
+            <Text style={[styles.overlayTitle, { color: COLORS.NEGATIVE }]}>GAME OVER</Text>
+            <Text style={styles.overlaySubtitle}>Pontos: {score}</Text>
+            <Text style={{ color: '#fff', marginTop: 10 }}>Toque para reiniciar</Text>
+          </View>
+        )}
+      </Animated.View>
     </Pressable>
   );
 }
 
 /* ================= STYLES ================= */
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0d1117' },
+  container: { flex: 1, overflow: 'hidden' },
 
-  hudEmotion: {
-    position: 'absolute',
-    top: 40,
-    right: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 15,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    zIndex: 20,
-    alignItems: 'flex-end',
+  feverOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255, 215, 0, 0.05)',
+    zIndex: -1,
   },
-  hudPontos: {
+
+  // CLOUDS
+  cloud: {
     position: 'absolute',
-    top: 40,
-    left: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: -5,
+  },
+  cloudBubbleMain: {
+    width: '100%', height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.CLOUD,
+  },
+  cloudBubble: {
+    position: 'absolute',
+    width: 40, height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.CLOUD,
+  },
+
+  hudTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 50,
+    paddingHorizontal: 20,
     zIndex: 20,
   },
   hudText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold',
-  },
-
-  box: {
-    position: 'absolute',
-    width: BOX_SIZE,
-    height: BOX_SIZE,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  boxText: {
-    fontWeight: 'bold',
-    color: '#0d1117',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowRadius: 4,
   },
   score: {
     color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '900',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowRadius: 4,
+  },
+  feverText: { color: COLORS.BONUS, fontWeight: 'bold', fontSize: 12 },
+  magnetText: { color: COLORS.MAGNET, fontWeight: 'bold', fontSize: 12 },
+
+  box: {
+    position: 'absolute',
+    width: BOX_SIZE, height: BOX_SIZE,
+    borderRadius: 12,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  boxText: { fontWeight: 'bold', color: '#0d1117', fontSize: 16 },
+
+  floatingText: {
+    position: 'absolute', fontSize: 20, fontWeight: '900',
+    textShadowColor: 'black', textShadowRadius: 2,
   },
 
-  overlay: {
-    position: 'absolute',
-    top: '45%',
-    alignSelf: 'center',
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
+  particle: {
+    position: 'absolute', width: 8, height: 8, borderRadius: 4,
   },
+
+  centerOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 30,
+  },
+  overlayTitle: { fontSize: 32, fontWeight: 'bold', color: '#fff', marginBottom: 8 },
+  overlaySubtitle: { fontSize: 18, color: '#fff' },
+
+  aura: {
+    position: 'absolute', top: -10, left: -10,
+    width: SLIVI_SIZE + 20, height: SLIVI_SIZE + 20,
+    borderRadius: (SLIVI_SIZE + 20) / 2,
+    backgroundColor: 'rgba(255, 215, 0, 0.3)',
+    borderWidth: 2, borderColor: COLORS.BONUS,
+  }
 });
