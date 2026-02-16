@@ -35,10 +35,10 @@ const LAMP_ON = require('../assets/images/components/botoes/luz-off.png');
 const LAMP_OFF = require('../assets/images/components/botoes/luz-on.png');
 
 const WEATHER_IMAGES = {
-  sun: require('../assets/images/weather/clean_sky.png'),
-  rain: require('../assets/images/weather/rain_storm.png'),
-  cloudy: require('../assets/images/weather/rain_storm.png'),
-  night: require('../assets/images/weather/night_sky.png')
+  sun: require('../assets/images/weather/city_sunny.png'),
+  rain: require('../assets/images/weather/city_rain.png'),
+  cloudy: require('../assets/images/weather/city_rain.png'),
+  night: require('../assets/images/weather/city_night.png')
 };
 
 
