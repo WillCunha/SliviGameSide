@@ -4,9 +4,6 @@ import { SliviState } from '../types/slivi';
 
 export async function fetchSliviState(token) {
 
-
-
-
   return apiRequest<SliviState>('slivi/state', {
     method: 'GET',
     headers: {

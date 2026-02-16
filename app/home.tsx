@@ -16,12 +16,14 @@ import FoodModal from '@/src/components/foods/foodModal';
 import { useLocalSearchParams } from 'expo-router';
 
 // --- IMPORTS DE SERVIÇOS E DADOS ---
+import StatesModal from '@/components/Modal/States';
 import { syncUserLocation, WeatherState } from '@/src/api/weatherClient';
 import { FOOD_IMAGES } from '@/src/components/foods/foodMap';
 import { feedSlivi } from '@/src/services/feedService';
 import { sleepSlivi, wakeSlivi } from '@/src/services/sleepServices';
 import { fetchSliviState } from '@/src/services/sliviService';
 import { Emotion } from '@/src/types/emotions';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 
@@ -86,6 +88,17 @@ export default function HomeScreen() {
   const [currentFoodId, setCurrentFoodId] = useState<number | null>(null); // <--- 2. Estado para o ID
   const [foodModalVisible, setFoodModalVisible] = useState(false);
 
+  const [sliviStates, setSliviStates] = useState<{
+    HUNGER: number;
+    ENERGY: number;
+    SLEEP: number;
+    TEMPERATURE: number;
+    FUN: number;
+  } | null>(null);
+
+  const [statesModalVisible, setStatesModalVisible] = useState(false);
+
+
   // Define qual emoção será exibida: A do servidor ou a do ciclo de sono
   const displayEmotion = sleepState === 'DORMINDO' ? emotion : (sleepState as Emotion);
 
@@ -126,7 +139,9 @@ export default function HomeScreen() {
     if (!token) return;
     try {
       const state = await fetchSliviState(token);
+
       setEmotion(state.emotion);
+      setSliviStates(state.states); // 👈 AQUI
 
       if (state.isSleeping) {
         setIsLightOn(false);
@@ -273,30 +288,42 @@ export default function HomeScreen() {
         <View style={styles.darkOverlay} pointerEvents="none" />
       )}
       <View style={styles.headerComponent}>
-        {isLightOn && (
+        <View style={styles.leftHeader} >
+
           <TouchableOpacity
-            onPress={() => setFoodModalVisible(true)}
+            onPress={() => setStatesModalVisible(true)}
+          >
+            <Ionicons name="stats-chart-outline" size={24} color="#474646" style={{marginRight: '5%', marginLeft: '5%'}} />
+          </TouchableOpacity>
+
+          {isLightOn && (
+            <TouchableOpacity
+              onPress={() => setFoodModalVisible(true)}
+            >
+              <Ionicons name="restaurant-outline" size={24} color="#474646" />
+            </TouchableOpacity>
+          )}
+
+        </View>
+        <View style={styles.rightHeader} >
+          {/* Botão Lâmpada */}
+          <TouchableOpacity
+            onPress={toggleLight}
           >
             <Image
-              source={require('../assets/images/components/botoes/elemento-geladeira.png')}
+              // Use uma imagem para ON e outra para OFF se tiver, ou a mesma
+              source={isLightOn ? LAMP_ON : LAMP_OFF}
               style={{ width: 65, height: 65 }}
+              resizeMode="contain"
             />
           </TouchableOpacity>
-        )}
-        {/* Botão Lâmpada */}
-        <TouchableOpacity
-          onPress={toggleLight}
-        >
-          <Image
-            // Use uma imagem para ON e outra para OFF se tiver, ou a mesma
-            source={isLightOn ? LAMP_ON : LAMP_OFF}
-            style={{ width: 65, height: 65 }}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleLogout}>
-          <Text style={styles.logoutText}>Sair</Text>
-        </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout}>
+            <Ionicons name="notifications-outline" size={24} color="#474646"  />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleLogout}>
+            <Ionicons name="exit-outline" size={24} color="#474646" style={{marginRight: '-10%', marginLeft: '20%'}} />
+          </TouchableOpacity>
+        </View>
       </View>
       <View style={styles.windowWrapper}>
         <Image
@@ -352,6 +379,14 @@ export default function HomeScreen() {
         onClose={() => setFoodModalVisible(false)}
         onSelectFood={(food) => startEatingAnimation(food)}
       />
+
+      {sliviStates && (
+        <StatesModal
+          visible={statesModalVisible}
+          onClose={() => setStatesModalVisible(false)}
+          states={sliviStates}
+        />
+      )}
 
 
     </View>
@@ -412,16 +447,35 @@ const styles = StyleSheet.create({
 
   headerComponent: {
     top: 40,
-    right: 100,
     position: 'absolute',
     minHeight: 50,
     maxHeight: 50,
-    width: '20%',
+    width: '100%',
     display: 'flex',
     flexDirection: 'row',
     marginBottom: '30%',
     alignItems: 'center'
   },
+  leftHeader: {
+    width: '50%',
+    position: 'absolute',
+    left: 5,
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+
+  },
+  rightHeader: {
+    width: '50%',
+    position: 'absolute',
+    right: 0,
+    display: 'flex',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+
   logoutText: {
     color: '#ff4d4f',
     fontWeight: 'bold',
