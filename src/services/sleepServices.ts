@@ -8,7 +8,7 @@ import { apiRequest } from "../api/client";
  * Aceita apenas 'sleep' ou 'wake' para evitar erros de digitação.
  */
 async function sendSleepAction(actionType: 'sleep' | 'wake') {
-  const token = await AsyncStorage.getItem("token");
+  const token = await AsyncStorage.getItem("slivi_token");
 
   return apiRequest<any>("slivi/action", {
     method: "POST",

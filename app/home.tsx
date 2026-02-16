@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Dimensions,
   Image,
@@ -14,6 +13,7 @@ import {
 import RainAnimation from '@/components/RainAnimation';
 import Slivi from '@/components/slivi';
 import FoodModal from '@/src/components/foods/foodModal';
+import { useLocalSearchParams } from 'expo-router';
 
 // --- IMPORTS DE SERVIÇOS E DADOS ---
 import { syncUserLocation, WeatherState } from '@/src/api/weatherClient';
@@ -22,6 +22,7 @@ import { feedSlivi } from '@/src/services/feedService';
 import { sleepSlivi, wakeSlivi } from '@/src/services/sleepServices';
 import { fetchSliviState } from '@/src/services/sliviService';
 import { Emotion } from '@/src/types/emotions';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
@@ -42,12 +43,21 @@ const WEATHER_IMAGES = {
 
 
 
-type Props = {
-  token: string;
-  userId: number
-}
 
-export default function HomeScreen({ token, userId }: Props) {
+
+export default function HomeScreen() {
+
+  const params = useLocalSearchParams();
+
+  const token =
+    typeof params.token === 'string'
+      ? params.token
+      : undefined;
+
+  const userId =
+    typeof params.userId === 'string'
+      ? Number(params.userId)
+      : undefined;
 
   // --- ESTADOS DO JOGO ---
   const [emotion, setEmotion] = useState<Emotion>('NEUTRO');
@@ -113,10 +123,10 @@ export default function HomeScreen({ token, userId }: Props) {
 
   // --- FUNÇÃO PARA CARREGAR OS STATUS DO SLIVI ---
   async function loadState() {
+    if (!token) return;
     try {
       const state = await fetchSliviState(token);
       setEmotion(state.emotion);
-      console.log(state);
 
       if (state.isSleeping) {
         setIsLightOn(false);
@@ -228,7 +238,30 @@ export default function HomeScreen({ token, userId }: Props) {
     setIsAnimating(false);
   };
 
-  if (loading) return <ActivityIndicator size="large" />;
+  async function handleLogout() {
+    Alert.alert(
+      'Sair',
+      'Deseja realmente sair da sua conta?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Sair',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AsyncStorage.removeItem('slivi_token');
+              await AsyncStorage.removeItem('slivi_userId');
+
+              // Limpa toda a stack de navegação
+              router.replace('/');
+            } catch (err) {
+              console.error('Erro ao fazer logout:', err);
+            }
+          },
+        },
+      ]
+    );
+  }
 
   // Seleciona a imagem de fundo com base no estado 'condition'
   // Fallback para 'sun' se algo der errado
@@ -260,6 +293,9 @@ export default function HomeScreen({ token, userId }: Props) {
             style={{ width: 65, height: 65 }}
             resizeMode="contain"
           />
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleLogout}>
+          <Text style={styles.logoutText}>Sair</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.windowWrapper}>
@@ -297,14 +333,14 @@ export default function HomeScreen({ token, userId }: Props) {
           </TouchableOpacity>
         )}
 
-      <TouchableOpacity onPress={() => router.push({
-        pathname: './games/SliviPulse',
-        params: {
-          emotion: emotion,
-        }
-      })} >
-        <Text>Jogar Slivi Pulse</Text>
-      </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push({
+          pathname: './games/SliviPulse',
+          params: {
+            emotion: emotion,
+          }
+        })} >
+          <Text>Jogar Slivi Pulse</Text>
+        </TouchableOpacity>
 
 
       </View>
@@ -376,7 +412,7 @@ const styles = StyleSheet.create({
 
   headerComponent: {
     top: 40,
-    right: 35,
+    right: 100,
     position: 'absolute',
     minHeight: 50,
     maxHeight: 50,
@@ -384,5 +420,11 @@ const styles = StyleSheet.create({
     display: 'flex',
     flexDirection: 'row',
     marginBottom: '30%',
+    alignItems: 'center'
   },
+  logoutText: {
+    color: '#ff4d4f',
+    fontWeight: 'bold',
+    fontSize: 16,
+  }
 });

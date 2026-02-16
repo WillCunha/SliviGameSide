@@ -1,11 +1,10 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from '../api/client';
 import { SliviState } from '../types/slivi';
 
 
-export async function fetchSliviState() {
+export async function fetchSliviState(token) {
 
-  const token = await AsyncStorage.getItem("token");
+
 
 
   return apiRequest<SliviState>('slivi/state', {
@@ -14,5 +13,5 @@ export async function fetchSliviState() {
       Authorization: `Bearer ${token}`,
     },
   });
-  
+
 }

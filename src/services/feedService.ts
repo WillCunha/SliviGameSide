@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { apiRequest } from "../api/client";
 
 export async function feedSlivi(foodId: number) {
-  const token = await AsyncStorage.getItem("token");
+  const token = await AsyncStorage.getItem("slivi_token");
 
   
 
