@@ -94,6 +94,7 @@ export default function HomeScreen() {
     SLEEP: number;
     TEMPERATURE: number;
     FUN: number;
+    BRAVO: number;
   } | null>(null);
 
   const [statesModalVisible, setStatesModalVisible] = useState(false);

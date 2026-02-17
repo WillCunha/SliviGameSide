@@ -28,6 +28,7 @@ const CONFIG = {
     SLEEP: { label: 'Sono', icon: 'moon' },
     TEMPERATURE: { label: 'Temperatura', icon: 'thermometer' },
     FUN: { label: 'Diversão', icon: 'happy' }, // 👈 AQUI
+    BRAVO: { label: 'Bravo', icon: 'sad' }, // 👈 AQUI
 };
 
 

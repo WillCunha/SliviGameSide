@@ -8,7 +8,7 @@ function decodeJWT(token: string) {
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
     const jsonPayload = decodeURIComponent(
-      atob(base64).split('').map(function(c) {
+      atob(base64).split('').map(function (c) {
         return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
       }).join('')
     );
@@ -31,7 +31,7 @@ export async function login(email: string, password: string) {
   if (!data.success) {
     throw new Error(data.error);
   }
-  
+
   // O token vem dentro de data.data.token
   const token = data.data.token;
 
@@ -45,4 +45,25 @@ export async function login(email: string, password: string) {
 
   // Retornamos o token e o userId para a tela de Login
   return { token, userId };
+
+
+}
+
+export async function updateDeviceToken(jwtToken: string, deviceToken: string) {
+  const response = await fetch(`${API_URL}/auth/device-token`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${jwtToken}`
+    },
+    body: JSON.stringify({ device_token: deviceToken }),
+  });
+
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error);
+  }
+
+  return data;
 }
