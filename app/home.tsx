@@ -16,10 +16,12 @@ import FoodModal from '@/src/components/foods/foodModal';
 import { useLocalSearchParams } from 'expo-router';
 
 // --- IMPORTS DE SERVIÇOS E DADOS ---
+import Notification from '@/components/Modal/Notification';
 import StatesModal from '@/components/Modal/States';
 import { syncUserLocation, WeatherState } from '@/src/api/weatherClient';
 import { FOOD_IMAGES } from '@/src/components/foods/foodMap';
 import { feedSlivi } from '@/src/services/feedService';
+import { fetchNotifications, SliviNotification } from '@/src/services/notificationService';
 import { sleepSlivi, wakeSlivi } from '@/src/services/sleepServices';
 import { fetchSliviState } from '@/src/services/sliviService';
 import { Emotion } from '@/src/types/emotions';
@@ -87,6 +89,12 @@ export default function HomeScreen() {
   const [currentFoodKey, setCurrentFoodKey] = useState<string | null>(null);
   const [currentFoodId, setCurrentFoodId] = useState<number | null>(null); // <--- 2. Estado para o ID
   const [foodModalVisible, setFoodModalVisible] = useState(false);
+
+  // --- ESTADO DE NOTIFICAÇÕES ---
+  const [notifications, setNotifications] = useState<SliviNotification[]>([]);
+  const [notifModalVisible, setNotifModalVisible] = useState(false);
+  const [loadingNotifs, setLoadingNotifs] = useState(false);
+  const [hasUnread, setHasUnread] = useState(false);
 
   const [sliviStates, setSliviStates] = useState<{
     HUNGER: number;
@@ -279,6 +287,48 @@ export default function HomeScreen() {
     );
   }
 
+  async function handleOpenNotifications() {
+    setNotifModalVisible(true);
+
+    // Ao abrir, assumimos que o usuário "viu" as notificações
+    // Visualmente, removemos o alerta imediatamente
+    setHasUnread(false);
+
+    // Opcional: Aqui futuramente você pode chamar uma API para marcar como lido no banco
+    // await markAllAsRead(token); 
+
+    if (!token) return;
+    setLoadingNotifs(true);
+    try {
+      const data = await fetchNotifications(token);
+      setNotifications(data);
+    } catch (error) {
+      console.log("Erro ao buscar notificações:", error);
+    } finally {
+      setLoadingNotifs(false);
+    }
+  }
+  // Função auxiliar para verificar sem abrir o modal
+  const checkNotificationsStatus = async () => {
+    try {
+      const data = await fetchNotifications(token);
+      // Verifica se existe ALGUMA notificação onde is_read é 0 ou false
+      const hasNew = data.some(n => n.is_read === 0);
+      setHasUnread(hasNew);
+
+      // Opcional: Já salva os dados para quando abrir não precisar carregar de novo
+      setNotifications(data);
+    } catch (error) {
+      console.log("Erro ao checar notificações:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (token) {
+      checkNotificationsStatus();
+    }
+  }, [token]);
+
   // Seleciona a imagem de fundo com base no estado 'condition'
   // Fallback para 'sun' se algo der errado
   const currentBgImage = WEATHER_IMAGES[weather.condition] || WEATHER_IMAGES.sun;
@@ -294,7 +344,7 @@ export default function HomeScreen() {
           <TouchableOpacity
             onPress={() => setStatesModalVisible(true)}
           >
-            <Ionicons name="stats-chart-outline" size={24} color="#474646" style={{marginRight: '5%', marginLeft: '5%'}} />
+            <Ionicons name="stats-chart-outline" size={24} color="#474646" style={{ marginRight: '5%', marginLeft: '5%' }} />
           </TouchableOpacity>
 
           {isLightOn && (
@@ -318,11 +368,20 @@ export default function HomeScreen() {
               resizeMode="contain"
             />
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleLogout}>
-            <Ionicons name="notifications-outline" size={24} color="#474646"  />
+          <TouchableOpacity onPress={handleOpenNotifications} style={styles.notificationBtn}>
+            <Ionicons
+              // Se tem não lida: Ícone preenchido ('notifications'). Senão: Outline.
+              name={hasUnread ? "notifications" : "notifications-outline"}
+              size={24}
+              // Se tem não lida: Laranja (#FF9800). Senão: Cinza Escuro (#474646).
+              color={hasUnread ? "#FF9800" : "#474646"}
+            />
+
+            {/* Opcional: Adiciona uma bolinha vermelha (Badge) para chamar mais atenção */}
+            {hasUnread && <View style={styles.badgeDot} />}
           </TouchableOpacity>
           <TouchableOpacity onPress={handleLogout}>
-            <Ionicons name="exit-outline" size={24} color="#474646" style={{marginRight: '-10%', marginLeft: '20%'}} />
+            <Ionicons name="exit-outline" size={24} color="#474646" style={{ marginRight: '-10%', marginLeft: '20%' }} />
           </TouchableOpacity>
         </View>
       </View>
@@ -388,6 +447,13 @@ export default function HomeScreen() {
           states={sliviStates}
         />
       )}
+
+      <Notification
+        visible={notifModalVisible}
+        onClose={() => setNotifModalVisible(false)}
+        notifications={notifications}
+        loading={loadingNotifs}
+      />
 
 
     </View>
@@ -481,5 +547,23 @@ const styles = StyleSheet.create({
     color: '#ff4d4f',
     fontWeight: 'bold',
     fontSize: 16,
-  }
+  },
+
+  notificationBtn: {
+    position: 'relative', // Necessário para o badge se posicionar
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  badgeDot: {
+    position: 'absolute',
+    top: 0,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'red', // Bolinha vermelha de alerta
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
 });

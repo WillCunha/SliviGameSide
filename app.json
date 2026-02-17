@@ -41,16 +41,18 @@
           }
         }
       ],
-      "expo-notifications" 
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
     },
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "SEU_PROJECT_ID_AQUI"
+        "projectId": "cd197c19-0bd1-4182-8ac1-6848628e7157"
       }
-    }
+    },
+    "owner": "willcunha"
   }
 }
