@@ -1,3 +1,4 @@
+import { Audio } from 'expo-av'; // <--- IMPORT DO ÁUDIO
 import { useEffect, useRef, useState } from 'react';
 import {
   Alert,
@@ -13,7 +14,7 @@ import {
 import RainAnimation from '@/components/RainAnimation';
 import Slivi from '@/components/slivi';
 import FoodModal from '@/src/components/foods/foodModal';
-import { useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 
 // --- IMPORTS DE SERVIÇOS E DADOS ---
 import Notification from '@/components/Modal/Notification';
@@ -24,10 +25,10 @@ import { feedSlivi } from '@/src/services/feedService';
 import { fetchNotifications, SliviNotification } from '@/src/services/notificationService';
 import { sleepSlivi, wakeSlivi } from '@/src/services/sleepServices';
 import { fetchSliviState } from '@/src/services/sliviService';
+import { generateSpeech } from '@/src/services/speechService';
 import { Emotion } from '@/src/types/emotions';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 const WINDOW_SIZE = width * 0.6;
@@ -45,113 +46,103 @@ const WEATHER_IMAGES = {
   night: require('../assets/images/weather/city_night.png')
 };
 
-
-
-
-
 export default function HomeScreen() {
 
   const params = useLocalSearchParams();
 
-  const token =
-    typeof params.token === 'string'
-      ? params.token
-      : undefined;
-
-  const userId =
-    typeof params.userId === 'string'
-      ? Number(params.userId)
-      : undefined;
+  const token = typeof params.token === 'string' ? params.token : undefined;
+  const userId = typeof params.userId === 'string' ? Number(params.userId) : undefined;
 
   // --- ESTADOS DO JOGO ---
   const [emotion, setEmotion] = useState<Emotion>('NEUTRO');
   const [loading, setLoading] = useState(true);
 
-  // --- ESTADOS DE CLIMA (NOVO) ---
+  // --- ESTADOS DE CLIMA ---
   const [weather, setWeather] = useState<WeatherState>({
-    condition: 'sun', // Padrão seguro
+    condition: 'sun',
     temp: 25,
     is_day: true
   });
 
   // --- ESTADOS DE LUZ E SONO ---
   const [isLightOn, setIsLightOn] = useState(true);
-  const [sleepState, setSleepState] = useState<Emotion>('DORMINDO')
+  const [sleepState, setSleepState] = useState<Emotion>('DORMINDO');
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // --- ESTADOS DA ANIMAÇÃO ---
+  // --- ESTADOS DA ANIMAÇÃO E COMIDA ---
   const [foodVisible, setFoodVisible] = useState(false);
   const [foodStage, setFoodStage] = useState(0);
   const [mouthOverride, setMouthOverride] = useState<any>(null);
   const [isAnimating, setIsAnimating] = useState(false);
-
-  // --- ESTADOS PARA COMIDA E LÓGICA ---
   const [currentFoodKey, setCurrentFoodKey] = useState<string | null>(null);
-  const [currentFoodId, setCurrentFoodId] = useState<number | null>(null); // <--- 2. Estado para o ID
+  const [currentFoodId, setCurrentFoodId] = useState<number | null>(null);
   const [foodModalVisible, setFoodModalVisible] = useState(false);
 
-  // --- ESTADO DE NOTIFICAÇÕES ---
+  // --- ESTADO DE NOTIFICAÇÕES E STATUS ---
   const [notifications, setNotifications] = useState<SliviNotification[]>([]);
   const [notifModalVisible, setNotifModalVisible] = useState(false);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
   const [hasUnread, setHasUnread] = useState(false);
 
   const [sliviStates, setSliviStates] = useState<{
-    HUNGER: number;
-    ENERGY: number;
-    SLEEP: number;
-    TEMPERATURE: number;
-    FUN: number;
-    BRAVO: number;
+    HUNGER: number; ENERGY: number; SLEEP: number; TEMPERATURE: number; FUN: number; BRAVO: number;
   } | null>(null);
-
   const [statesModalVisible, setStatesModalVisible] = useState(false);
 
+  // --- NOVOS ESTADOS PARA FALA ---
+  const [sound, setSound] = useState<Audio.Sound | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechText, setSpeechText] = useState("");
+  const speechIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const speechTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Define qual emoção será exibida: A do servidor ou a do ciclo de sono
+  // Limpa o som da memória quando desmontar
+  useEffect(() => {
+    return sound ? () => { sound.unloadAsync(); } : undefined;
+  }, [sound]);
+
   const displayEmotion = sleepState === 'DORMINDO' ? emotion : (sleepState as Emotion);
-
-  // Recupera sprites dinamicamente
   const currentSprites = currentFoodKey ? (FOOD_IMAGES as any)[currentFoodKey] : [];
 
   useEffect(() => {
     loadGameData();
-
-    const intervalId = setInterval(() => {
-      loadState();
-    }, 60000);
-
+    const intervalId = setInterval(() => { loadState(); }, 60000);
     return () => clearInterval(intervalId);
   }, [token]);
 
+  useEffect(() => {
+    if (token) checkNotificationsStatus();
+  }, [token]);
 
-  // Função Wrapper para carregar tudo (Slivi + Clima)
+  useEffect(() => {
+
+    scheduleNextSpeech();
+
+    return () => {
+      if (speechTimeoutRef.current) {
+        clearTimeout(speechTimeoutRef.current);
+      }
+    };
+  }, []);
+
   async function loadGameData() {
     setLoading(true);
-    await loadState(); // Carrega Slivi
-    await loadWeather(); // Carrega Clima
+    await loadState();
+    await loadWeather();
     setLoading(false);
   }
 
-
-  // --- FUNÇÃO PARA CARREGAR CLIMA ---
   async function loadWeather() {
     const weatherData = await syncUserLocation(userId || 1);
-
-    if (weatherData) {
-      setWeather(weatherData);
-    }
+    if (weatherData) setWeather(weatherData);
   }
 
-  // --- FUNÇÃO PARA CARREGAR OS STATUS DO SLIVI ---
   async function loadState() {
     if (!token) return;
     try {
       const state = await fetchSliviState(token);
-
       setEmotion(state.emotion);
-      setSliviStates(state.states); // 👈 AQUI
-
+      setSliviStates(state.states);
       if (state.isSleeping) {
         setIsLightOn(false);
         setSleepState('DORMINDO');
@@ -163,47 +154,98 @@ export default function HomeScreen() {
           sleepTimerRef.current = null;
         }
       }
-
     } catch (err: any) {
-      Alert.alert("Erro: ", err.message);
+      console.log("Erro ao carregar estado: ", err.message);
     } finally {
       setLoading(false);
     }
   }
 
+  // --- LÓGICA DE FALA (NOVO) ---
+
+  function scheduleNextSpeech() {
+    if (speechTimeoutRef.current) {
+      clearTimeout(speechTimeoutRef.current);
+    }
+
+    // ⏱️ intervalo aleatório (ex: 25s a 70s)
+    const min = 25000;
+    const max = 70000;
+    const randomDelay = Math.floor(Math.random() * (max - min)) + min;
+
+    speechTimeoutRef.current = setTimeout(() => {
+      // handleSliviSpeech();
+    }, randomDelay);
+  }
+
+
+  const startTalkingAnimation = () => {
+    let mouthIsOpen = false;
+    speechIntervalRef.current = setInterval(() => {
+      setMouthOverride(mouthIsOpen ? MOUTH_CLOSED : MOUTH_OPEN);
+      mouthIsOpen = !mouthIsOpen;
+    }, 180); // Alterna a cada 180ms para simular fala
+  };
+
+  const stopTalkingAnimation = () => {
+    if (speechIntervalRef.current) clearInterval(speechIntervalRef.current);
+    setMouthOverride(null);
+  };
+
+  async function handleSliviSpeech(textToSpeak: string = "Olá, estou aqui para te ajudar!") {
+    if (isSpeaking) return; // 
+
+    try {
+      const response = await generateSpeech(textToSpeak);
+      const { phrase, audio_url } = response;
+
+      const fullAudioUrl = `https://wfsoft.com.br/wf-api/slivi-game/${audio_url}`;
+
+      setSpeechText(phrase);
+
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        { uri: fullAudioUrl },
+        { shouldPlay: true },
+        (status: any) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setIsSpeaking(false);
+            stopTalkingAnimation();
+            scheduleNextSpeech()
+          }
+        }
+      );
+
+      setSound(newSound);
+      setIsSpeaking(true);
+      startTalkingAnimation();
+
+    } catch (error) {
+      console.error("Erro na fala:", error);
+      setIsSpeaking(false);
+      stopTalkingAnimation();
+      Alert.alert("Ops!", "Não foi possível gerar a fala agora.");
+    }
+  }
+
+
   // --- LÓGICA DA LÂMPADA ---
   const toggleLight = async () => {
     if (isLightOn) {
-      // APAGAR A LUZ
       setIsLightOn(false);
       setSleepState('SONOLENTO');
+      sleepSlivi().catch(err => console.log("Erro sleep:", err));
 
-      sleepSlivi().catch(err => console.log("Erro ao enviar sleep:", err));
-
-      // Calcula tempo aleatório entre 20s (20000ms) e 30s (30000ms)
       const timeToSleep = Math.floor(Math.random() * 10000) + 20000;
-
-      // Inicia o timer para dormir profundamente
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
-
-      sleepTimerRef.current = setTimeout(() => {
-        setSleepState('DORMINDO');
-      }, timeToSleep);
-
+      sleepTimerRef.current = setTimeout(() => { setSleepState('DORMINDO'); }, timeToSleep);
     } else {
-
-      // ACENDER A LUZ
       setIsLightOn(true);
       setSleepState(emotion);
-
-      wakeSlivi().catch(err => console.log("Erro ao enviar wake:", err));
-
-      // Cancela o timer de dormir se ele ainda estiver rodando
+      wakeSlivi().catch(err => console.log("Erro wake:", err));
       if (sleepTimerRef.current) {
         clearTimeout(sleepTimerRef.current);
         sleepTimerRef.current = null;
       }
-      // Opcional: Recarregar estado atualizado do servidor ao acordar
       loadState();
     }
   };
@@ -211,10 +253,8 @@ export default function HomeScreen() {
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   function startEatingAnimation(food: any) {
-
     setCurrentFoodKey(food.image_key);
-    setCurrentFoodId(food.id); // <--- 3. Salvamos o ID aqui para usar depois
-
+    setCurrentFoodId(food.id);
     setFoodStage(0);
     setFoodVisible(true);
     setIsAnimating(false);
@@ -222,175 +262,112 @@ export default function HomeScreen() {
   }
 
   const handleEat = async () => {
-    if (isAnimating) return;
+    if (isAnimating || isSpeaking) return; // Evita comer enquanto fala
     if (!currentSprites || currentSprites.length === 0) return;
 
     setIsAnimating(true);
-
-    // Animação da boca abrindo
     setMouthOverride(MOUTH_OPEN);
     await wait(300);
-
-    // Mordida
     setMouthOverride(MOUTH_CLOSED);
+
     const nextStage = foodStage + 1;
     setFoodStage(nextStage);
     await wait(400);
-
-    // Boca volta ao normal
     setMouthOverride(null);
 
-    // VERIFICA SE ACABOU A COMIDA
     if (nextStage >= currentSprites.length - 1) {
-      // <--- 4. Chamada à API ao concluir
       if (currentFoodId) {
         try {
-          await feedSlivi(currentFoodId); // Chama o serviço
-
+          await feedSlivi(currentFoodId);
           await loadState();
-
         } catch (error) {
           Alert.alert("Erro", "Não foi possível computar a alimentação.");
         }
       }
-
       setFoodVisible(false);
       setCurrentFoodKey(null);
       setCurrentFoodId(null);
     }
-
     setIsAnimating(false);
   };
 
   async function handleLogout() {
-    Alert.alert(
-      'Sair',
-      'Deseja realmente sair da sua conta?',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Sair',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await AsyncStorage.removeItem('slivi_token');
-              await AsyncStorage.removeItem('slivi_userId');
-
-              // Limpa toda a stack de navegação
-              router.replace('/');
-            } catch (err) {
-              console.error('Erro ao fazer logout:', err);
-            }
-          },
+    Alert.alert('Sair', 'Deseja realmente sair da sua conta?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Sair', style: 'destructive',
+        onPress: async () => {
+          try {
+            await AsyncStorage.removeItem('slivi_token');
+            await AsyncStorage.removeItem('slivi_userId');
+            router.replace('/');
+          } catch (err) { console.error('Erro ao fazer logout:', err); }
         },
-      ]
-    );
+      },
+    ]);
   }
 
   async function handleOpenNotifications() {
     setNotifModalVisible(true);
-
-    // Ao abrir, assumimos que o usuário "viu" as notificações
-    // Visualmente, removemos o alerta imediatamente
     setHasUnread(false);
-
-    // Opcional: Aqui futuramente você pode chamar uma API para marcar como lido no banco
-    // await markAllAsRead(token); 
-
     if (!token) return;
     setLoadingNotifs(true);
     try {
       const data = await fetchNotifications(token);
       setNotifications(data);
-    } catch (error) {
-      console.log("Erro ao buscar notificações:", error);
-    } finally {
-      setLoadingNotifs(false);
-    }
+    } catch (error) { console.log("Erro ao buscar notificações:", error); }
+    finally { setLoadingNotifs(false); }
   }
-  // Função auxiliar para verificar sem abrir o modal
+
   const checkNotificationsStatus = async () => {
     try {
       const data = await fetchNotifications(token);
-      // Verifica se existe ALGUMA notificação onde is_read é 0 ou false
       const hasNew = data.some(n => n.is_read === 0);
       setHasUnread(hasNew);
-
-      // Opcional: Já salva os dados para quando abrir não precisar carregar de novo
       setNotifications(data);
-    } catch (error) {
-      console.log("Erro ao checar notificações:", error);
-    }
+    } catch (error) { console.log("Erro ao checar notificações:", error); }
   };
 
-  useEffect(() => {
-    if (token) {
-      checkNotificationsStatus();
-    }
-  }, [token]);
-
-  // Seleciona a imagem de fundo com base no estado 'condition'
-  // Fallback para 'sun' se algo der errado
   const currentBgImage = WEATHER_IMAGES[weather.condition] || WEATHER_IMAGES.sun;
 
   return (
     <View style={styles.roomWall}>
-      {!isLightOn && (
-        <View style={styles.darkOverlay} pointerEvents="none" />
-      )}
+      {!isLightOn && <View style={styles.darkOverlay} pointerEvents="none" />}
+
+      {/* --- HEADER (TOPO) --- */}
       <View style={styles.headerComponent}>
-        <View style={styles.leftHeader} >
-
-          <TouchableOpacity
-            onPress={() => setStatesModalVisible(true)}
-          >
-            <Ionicons name="stats-chart-outline" size={24} color="#474646" style={{ marginRight: '5%', marginLeft: '5%' }} />
+        <View style={styles.leftHeader}>
+          {/* Status/User */}
+          <TouchableOpacity onPress={() => setStatesModalVisible(true)} style={styles.iconButton}>
+            <Ionicons name="stats-chart" size={26} color="#000" />
           </TouchableOpacity>
-
-          {isLightOn && (
-            <TouchableOpacity
-              onPress={() => setFoodModalVisible(true)}
-            >
-              <Ionicons name="restaurant-outline" size={24} color="#474646" />
-            </TouchableOpacity>
-          )}
-
         </View>
-        <View style={styles.rightHeader} >
-          {/* Botão Lâmpada */}
-          <TouchableOpacity
-            onPress={toggleLight}
-          >
-            <Image
-              // Use uma imagem para ON e outra para OFF se tiver, ou a mesma
-              source={isLightOn ? LAMP_ON : LAMP_OFF}
-              style={{ width: 65, height: 65 }}
-              resizeMode="contain"
+
+        <View style={styles.rightHeader}>
+          <TouchableOpacity onPress={toggleLight} style={styles.iconButton}>
+            <Ionicons
+              name={isLightOn ? "bulb" : "bulb-outline"}
+              size={26}
+              color={isLightOn ? "#e5ff00" : "#000"}
             />
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleOpenNotifications} style={styles.notificationBtn}>
-            <Ionicons
-              // Se tem não lida: Ícone preenchido ('notifications'). Senão: Outline.
-              name={hasUnread ? "notifications" : "notifications-outline"}
-              size={24}
-              // Se tem não lida: Laranja (#FF9800). Senão: Cinza Escuro (#474646).
-              color={hasUnread ? "#FF9800" : "#474646"}
-            />
 
-            {/* Opcional: Adiciona uma bolinha vermelha (Badge) para chamar mais atenção */}
+          {/* Notificações */}
+          <TouchableOpacity onPress={handleOpenNotifications} style={[styles.iconButton, styles.notificationBtn]}>
+            <Ionicons name={hasUnread ? "notifications" : "notifications"} size={26} color={hasUnread ? "#FF9800" : "#000"} />
             {hasUnread && <View style={styles.badgeDot} />}
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleLogout}>
-            <Ionicons name="exit-outline" size={24} color="#474646" style={{ marginRight: '-10%', marginLeft: '20%' }} />
+
+          {/* Sair/Engrenagem */}
+          <TouchableOpacity onPress={handleLogout} style={styles.iconButton}>
+            <Ionicons name="settings-sharp" size={26} color="#000" />
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* --- CORPO (CENTRO) --- */}
       <View style={styles.windowWrapper}>
-        <Image
-          source={currentBgImage}
-          style={styles.skyBackground}
-          resizeMode='stretch'
-        />
+        <Image source={currentBgImage} style={styles.skyBackground} resizeMode='stretch' />
         {weather.condition === 'rain' && (
           <View style={styles.weatherLayer}>
             <RainAnimation />
@@ -404,166 +381,227 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.sliviArea}>
+        {isSpeaking && (
+          <View style={styles.speechBubbleContainer}>
+            <View style={styles.speechBubble}>
+              <Text style={styles.speechText}>{speechText}</Text>
+            </View>
+            <View style={styles.bubbleTail} />
+          </View>
+        )}
+
+        {/* Sombreamento abaixo do Slivi */}
+        <View style={styles.sliviShadow} />
+
         <Slivi scale={1} size={600} emotion={emotion} eyeEmotion={sleepState} mouthOverride={mouthOverride} />
 
         {foodVisible && currentSprites.length > 0 && (
-          <TouchableOpacity
-            onPress={handleEat}
-            style={styles.foodTouch}
-            disabled={isAnimating}
-          >
-            <Image
-              source={currentSprites[foodStage]}
-              style={styles.foodImg}
-              resizeMode="contain"
-            />
+          <TouchableOpacity onPress={handleEat} style={styles.foodTouch} disabled={isAnimating}>
+            <Image source={currentSprites[foodStage]} style={styles.foodImg} resizeMode="contain" />
           </TouchableOpacity>
         )}
-
-        <TouchableOpacity onPress={() => router.push({
-          pathname: './games/SliviPulse',
-          params: {
-            emotion: emotion,
-          }
-        })} >
-          <Text>Jogar Slivi Pulse</Text>
-        </TouchableOpacity>
-
-
       </View>
 
+      {/* --- FOOTER (BARRA INFERIOR) --- */}
+      
+        <View style={styles.bottomNavBar}>
+          {/* Botão Comida */}
+          <TouchableOpacity onPress={() => {
+            if (isLightOn) {
+              setFoodModalVisible(true);
+            }
+          }} style={styles.bottomNavIcon}>
+            <Ionicons name="restaurant" size={32} color="#000" />
+          </TouchableOpacity>
 
+          {/* Botão Jogar (CTA Principal) */}
+          <TouchableOpacity
+            style={styles.playButton}
+            onPress={() => {
+              if (isLightOn) {
+                router.push({
+                  pathname: './games/SliviMaestro',
+                  params: { emotion: emotion }
+                })
+              }
+            }
+            }
+          >
+            <Text style={styles.playButtonText}>JOGAR{'\n'}SLIVI ON RIVER</Text>
+          </TouchableOpacity>
 
-      <FoodModal
-        visible={foodModalVisible}
-        onClose={() => setFoodModalVisible(false)}
-        onSelectFood={(food) => startEatingAnimation(food)}
-      />
+          {/* Botão Chat (Teste de Fala) */}
+          <TouchableOpacity onPress={() => {
+            if (isLightOn) {
+              handleSliviSpeech("Teste de fala do Slivi!")
+            }
+          }
+          } style={styles.bottomNavIcon}>
+            <Ionicons name="chatbubble-ellipses" size={32} color="#000" />
+          </TouchableOpacity>
+        </View>
+      
 
-      {sliviStates && (
-        <StatesModal
-          visible={statesModalVisible}
-          onClose={() => setStatesModalVisible(false)}
-          states={sliviStates}
-        />
-      )}
-
-      <Notification
-        visible={notifModalVisible}
-        onClose={() => setNotifModalVisible(false)}
-        notifications={notifications}
-        loading={loadingNotifs}
-      />
-
-
-    </View>
-
+      <FoodModal visible={foodModalVisible} onClose={() => setFoodModalVisible(false)} onSelectFood={(food) => startEatingAnimation(food)} />
+      {sliviStates && <StatesModal visible={statesModalVisible} onClose={() => setStatesModalVisible(false)} states={sliviStates} />}
+      <Notification visible={notifModalVisible} onClose={() => setNotifModalVisible(false)} notifications={notifications} loading={loadingNotifs} />
+    </View >
   );
 }
 
 const styles = StyleSheet.create({
   roomWall: {
     flex: 1,
-    backgroundColor: "#F2E8C9",
+    backgroundColor: "#EBE3CD", // Bege mais suave do mockup
     alignItems: 'center',
     justifyContent: 'flex-start',
     width: '100%',
     height: '100%',
   },
   darkOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'black',
-    opacity: 0.65,
-    zIndex: 20
+    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+    backgroundColor: 'black', opacity: 0.65, zIndex: 20
   },
+
+  // --- HEADER STYLES ---
+  headerComponent: {
+    marginTop: 50, // Afasta do topo da tela (Status Bar)
+    width: '90%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  leftHeader: {
+    flexDirection: 'row',
+  },
+  rightHeader: {
+    flexDirection: 'row',
+    gap: 10, // Espaçamento entre os ícones da direita
+  },
+  iconButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#000',
+    borderRadius: 12,
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notificationBtn: { position: 'relative' },
+  badgeDot: {
+    position: 'absolute', top: -4, right: -4, width: 12, height: 12,
+    borderRadius: 6, backgroundColor: 'red', borderWidth: 2, borderColor: '#EBE3CD',
+  },
+
+  // --- WINDOW & SLIVI STYLES ---
   windowWrapper: {
-    width: WINDOW_SIZE,
-    height: WINDOW_SIZE,
-    marginTop: 150,
+    width: WINDOW_SIZE, height: WINDOW_SIZE,
+    marginTop: 40, // Espaço entre o header e a janela
     overflow: 'hidden',
     zIndex: 1,
-    position: 'relative',
+    borderRadius: 20, // Cantos arredondados na janela
+    borderWidth: 1,
+    borderColor: '#000', // Moldura preta sólida
   },
   skyBackground: { width: '100%', height: '100%', position: 'absolute' },
   weatherLayer: { ...StyleSheet.absoluteFillObject, zIndex: 1, opacity: 0.8 },
-  windowFrameImage: { position: 'relative', width: '100%', height: '100%', zIndex: 10 },
+  windowFrameImage: { position: 'relative', width: '100%', height: '100%', zIndex: 10, opacity: 1 }, // Opacidade 0 caso a moldura real atrapalhe a borda preta sólida, ajuste se necessário
 
   sliviArea: {
-    position: 'absolute',
-    bottom: 10,
+    flex: 1,
     zIndex: 10,
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
+    marginTop: -20, // Puxa o Slivi um pouco para cima sobrepondo a janela
   },
-
-  foodTouch: {
+  sliviShadow: {
     position: 'absolute',
-    right: 100,
-    bottom: 140,
-    backgroundColor: 'transparent'
-  },
-  foodImg: {
-    width: 140,
-    height: 140,
-  },
-
-  headerComponent: {
-    top: 40,
-    position: 'absolute',
-    minHeight: 50,
-    maxHeight: 50,
+    bottom: -400,
     width: '100%',
-    display: 'flex',
-    flexDirection: 'row',
-    marginBottom: '30%',
-    alignItems: 'center'
-  },
-  leftHeader: {
-    width: '50%',
-    position: 'absolute',
-    left: 5,
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-
-  },
-  rightHeader: {
-    width: '50%',
-    position: 'absolute',
-    right: 0,
-    display: 'flex',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
+    height: 700,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+    transform: [{ scaleY: 0.5 }], // Achata a bolinha para virar sombra
   },
 
-  logoutText: {
-    color: '#ff4d4f',
-    fontWeight: 'bold',
+  // --- SPEECH BUBBLE ---
+  speechBubbleContainer: {
+    position: 'absolute',
+    top: -40,
+    alignItems: 'center',
+    zIndex: 100,
+    width: '80%',
+  },
+  speechBubble: {
+    backgroundColor: 'white',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: '#000',
+    width: '100%',
+  },
+  speechText: {
     fontSize: 16,
+    color: '#000',
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  bubbleTail: {
+    width: 0,
+    height: 0,
+    borderLeftWidth: 10,
+    borderRightWidth: 10,
+    borderTopWidth: 12,
+    borderStyle: 'solid',
+    backgroundColor: 'transparent',
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderTopColor: '#000',
+    marginTop: -1,
   },
 
-  notificationBtn: {
-    position: 'relative', // Necessário para o badge se posicionar
+  // --- FOOD STYLES ---
+  foodTouch: { position: 'absolute', right: 100, bottom: 140, backgroundColor: 'transparent' },
+  foodImg: { width: 140, height: 140 },
+
+  // --- BOTTOM NAV BAR STYLES ---
+  bottomNavBar: {
+    width: '90%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 40, // Distância do fundo da tela
+    zIndex: 10,
+  },
+  bottomNavIcon: {
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#000',
+    borderRadius: 15,
+    padding: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 70,
+    height: 70,
+  },
+  playButton: {
+    flex: 1,
+    marginHorizontal: 15,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: '#000',
+    borderRadius: 15,
+    height: 70,
     alignItems: 'center',
     justifyContent: 'center',
   },
-
-  badgeDot: {
-    position: 'absolute',
-    top: 0,
-    right: -2,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'red', // Bolinha vermelha de alerta
-    borderWidth: 1,
-    borderColor: '#fff',
+  playButtonText: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#000',
+    textAlign: 'center',
+    textTransform: 'uppercase',
   },
 });

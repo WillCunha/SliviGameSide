@@ -56,7 +56,6 @@ export default function LoadingScreen() {
                     projectId: projectId, // Passando o ID aqui!
                 })).data;
 
-                console.log("Device Token obtido:", pushToken);
                 return pushToken;
             } catch (e) {
                 console.log("Erro ao obter push token:", e);
