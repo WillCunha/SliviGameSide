@@ -393,7 +393,14 @@ export default function HomeScreen() {
         {/* Sombreamento abaixo do Slivi */}
         <View style={styles.sliviShadow} />
 
-        <Slivi scale={1} size={600} emotion={emotion} eyeEmotion={sleepState} mouthOverride={mouthOverride} />
+        <Slivi
+          scale={1}
+          size={600}
+          emotion={emotion}
+          eyeEmotion={sleepState}
+          mouthOverride={mouthOverride}
+          clothingItems={[require('@/assets/images/clothes/pants/black_hoodie_simplev2.png')]}
+        />
 
         {foodVisible && currentSprites.length > 0 && (
           <TouchableOpacity onPress={handleEat} style={styles.foodTouch} disabled={isAnimating}>
@@ -403,44 +410,44 @@ export default function HomeScreen() {
       </View>
 
       {/* --- FOOTER (BARRA INFERIOR) --- */}
-      
-        <View style={styles.bottomNavBar}>
-          {/* Botão Comida */}
-          <TouchableOpacity onPress={() => {
-            if (isLightOn) {
-              setFoodModalVisible(true);
-            }
-          }} style={styles.bottomNavIcon}>
-            <Ionicons name="restaurant" size={32} color="#000" />
-          </TouchableOpacity>
 
-          {/* Botão Jogar (CTA Principal) */}
-          <TouchableOpacity
-            style={styles.playButton}
-            onPress={() => {
-              if (isLightOn) {
-                router.push({
-                  pathname: './games/SliviMaestro',
-                  params: { emotion: emotion }
-                })
-              }
-            }
-            }
-          >
-            <Text style={styles.playButtonText}>JOGAR{'\n'}SLIVI ON RIVER</Text>
-          </TouchableOpacity>
+      <View style={styles.bottomNavBar}>
+        {/* Botão Comida */}
+        <TouchableOpacity onPress={() => {
+          if (isLightOn) {
+            setFoodModalVisible(true);
+          }
+        }} style={styles.bottomNavIcon}>
+          <Ionicons name="restaurant" size={32} color="#000" />
+        </TouchableOpacity>
 
-          {/* Botão Chat (Teste de Fala) */}
-          <TouchableOpacity onPress={() => {
+        {/* Botão Jogar (CTA Principal) */}
+        <TouchableOpacity
+          style={styles.playButton}
+          onPress={() => {
             if (isLightOn) {
-              handleSliviSpeech("Teste de fala do Slivi!")
+              router.push({
+                pathname: './games/SliviPulse',
+                params: { emotion: emotion }
+              })
             }
           }
-          } style={styles.bottomNavIcon}>
-            <Ionicons name="chatbubble-ellipses" size={32} color="#000" />
-          </TouchableOpacity>
-        </View>
-      
+          }
+        >
+          <Text style={styles.playButtonText}>JOGAR{'\n'}SLIVI ON RIVER</Text>
+        </TouchableOpacity>
+
+        {/* Botão Chat (Teste de Fala) */}
+        <TouchableOpacity onPress={() => {
+          if (isLightOn) {
+            handleSliviSpeech("Teste de fala do Slivi!")
+          }
+        }
+        } style={styles.bottomNavIcon}>
+          <Ionicons name="chatbubble-ellipses" size={32} color="#000" />
+        </TouchableOpacity>
+      </View>
+
 
       <FoodModal visible={foodModalVisible} onClose={() => setFoodModalVisible(false)} onSelectFood={(food) => startEatingAnimation(food)} />
       {sliviStates && <StatesModal visible={statesModalVisible} onClose={() => setStatesModalVisible(false)} states={sliviStates} />}

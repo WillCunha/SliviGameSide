@@ -1,3 +1,4 @@
+import { getObjectives, sendGameScore } from '@/src/services/gameService';
 import { Emotion } from '@/src/types/emotions';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -6,7 +7,7 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    Vibration, // Importamos a API de Vibração
+    Vibration,
     View
 } from 'react-native';
 import Slivi from '../slivi';
@@ -17,16 +18,16 @@ const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 /* =====================
    CONFIGURAÇÕES GERAIS
 ===================== */
-const CENTER_X = SCREEN_WIDTH / 2;
-const CENTER_Y = SCREEN_HEIGHT / 2;
-const SLIVI_SIZE = 90;
+const SLIVI_SIZE = 80;
 const ITEM_SIZE = 45;
-const SPAWN_RATE_BASE = 1400;
-const ITEM_SPEED_BASE = 2.0;
+const SLIVI_Y = SCREEN_HEIGHT - 180;
+
+const SPAWN_RATE_BASE = 1000;
+const ITEM_SPEED_BASE = 3.5;
 
 const MAX_ENERGY = 100;
-const ENERGY_COST_PER_SWIPE = 8;
-const ENERGY_REGEN = 0.15;
+const ENERGY_DECAY = -0.05; // 📉 Agora a energia CAI com o tempo!
+const MAX_LIVES = 5;        // ❤️ Máximo de corações
 
 /* =====================
    TIPOS E HELPER
@@ -40,16 +41,27 @@ interface GameItem {
     y: number;
     category: ItemCategory;
     subType: ItemSubType;
-    vx: number;
     vy: number;
-    driftSeed: number;
-    driftStrength: number;
     active: boolean;
 }
 
 interface SliviMaestroProps {
     initialEmotion?: Emotion;
 }
+
+type ObjectiveCondition = {
+    during_fever?: boolean; // No Maestro, o 'fever' equivale à turbulência
+    used_magnet?: boolean;
+};
+
+type GameObjective = {
+    id: number;
+    current_value: number;
+    target_value: number;
+    description: string,
+    type: string;
+    conditions: string | null;
+};
 
 function getEmotionFromValue(value: number): Emotion {
     if (value >= 80) return 'FUN';
@@ -73,7 +85,7 @@ function getInitialConfig(emotion: Emotion) {
 }
 
 /* =====================
-   COMPONENTE
+   COMPONENTE PRINCIPAL
 ===================== */
 export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestroProps) {
     const [started, setStarted] = useState(false);
@@ -83,19 +95,54 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
     const [score, setScore] = useState(0);
     const [combo, setCombo] = useState(1);
     const [energy, setEnergy] = useState(MAX_ENERGY);
+    const [lives, setLives] = useState(MAX_LIVES); // ❤️ Estado das vidas
     const [internalEmotionValue, setInternalEmotionValue] = useState(50);
 
-    // --- NOVOS ESTADOS DE TURBULÊNCIA ---
     const [isTurbulence, setIsTurbulence] = useState(false);
     const [riverSpeed, setRiverSpeed] = useState(1.0);
 
+    const [objectives, setObjectives] = useState<GameObjective[]>([]);
+
+    //STATS
+    const [stats, setStats] = useState({
+        total_boxes: 0,
+        bonus_boxes: 0,
+        magnetic_boxes: 0,
+        ghost_boxes: 0,
+        used_magnet: false,
+        during_fever: false,
+        run_duration: 0,
+    });
+
+    const sliviX = useRef(SCREEN_WIDTH / 2 - SLIVI_SIZE / 2);
     const startTime = useRef<number | null>(null);
     const config = useRef(getInitialConfig(initialEmotion));
 
     const currentEmotion = getEmotionFromValue(internalEmotionValue);
 
+    const startedRef = useRef(started);
+    const gameOverRef = useRef(gameOver);
+
+    // 🧠 Ref para ler o score atualizado dentro do spawner
+    const scoreRef = useRef(score);
+
+    useEffect(() => { startedRef.current = started; }, [started]);
+    useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
+    useEffect(() => { scoreRef.current = score; }, [score]);
+
     /* =====================
-       EVENTO SURPRESA (TURBULÊNCIA)
+       VERIFICADOR DE GAME OVER
+    ===================== */
+    useEffect(() => {
+        if (started && !gameOver) {
+            if (energy <= 0 || lives <= 0) {
+                setGameOver(true);
+            }
+        }
+    }, [energy, lives, started, gameOver]);
+
+    /* =====================
+       EVENTO DE TURBULÊNCIA
     ===================== */
     useEffect(() => {
         if (!started || gameOver) {
@@ -110,267 +157,210 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
 
         const triggerSurprise = () => {
             setIsTurbulence(true);
-            setRiverSpeed(2.5); // Acelera tudo em 2.5x
-
-            // Padrão de vibração contínua (vibra 200ms, pausa 100ms) - o `true` faz repetir
+            setRiverSpeed(2.2);
             Vibration.vibrate([100, 200], true);
 
-            // O evento dura entre 3 e 5 segundos
             const eventDuration = Math.random() * 2000 + 3000;
 
             turbulenceTimer = setTimeout(() => {
-                // Acaba a turbulência
                 setIsTurbulence(false);
                 setRiverSpeed(1.0);
                 Vibration.cancel();
 
-                // Agenda a próxima surpresa (daqui a 8 a 15 segundos)
-                const nextDelay = Math.random() * 7000 + 8000;
+                const nextDelay = Math.random() * 8000 + 7000;
                 nextEventTimer = setTimeout(triggerSurprise, nextDelay);
             }, eventDuration);
         };
 
-        // Agenda o primeiro evento após o jogo começar
-        nextEventTimer = setTimeout(triggerSurprise, Math.random() * 5000 + 5000);
+        nextEventTimer = setTimeout(triggerSurprise, 6000);
 
         return () => {
             clearTimeout(turbulenceTimer);
             clearTimeout(nextEventTimer);
-            Vibration.cancel(); // Garante que a vibração pare se o componente desmontar
+            Vibration.cancel();
         };
     }, [started, gameOver]);
 
     /* =====================
-       INPUT (SWIPE)
+       INPUT (MOVER PARA OS LADOS)
     ===================== */
+    const isTurbRef = useRef(isTurbulence);
+    useEffect(() => { isTurbRef.current = isTurbulence; }, [isTurbulence]);
+
+    const sliviStartX = useRef(sliviX.current);
+
     const panResponder = useRef(
         PanResponder.create({
             onStartShouldSetPanResponder: () => true,
-            onPanResponderRelease: (_, gestureState) => {
-                if (!started || gameOver) return;
+            onPanResponderGrant: () => {
+                sliviStartX.current = sliviX.current;
+            },
+            onPanResponderMove: (_, gestureState) => {
+                if (!startedRef.current || gameOverRef.current) return;
 
-                // Ignora toques curtos
-                if (Math.abs(gestureState.dx) < 20 && Math.abs(gestureState.dy) < 20) return;
-                handleSwipe(gestureState.dx, gestureState.dy);
+                let targetX = sliviStartX.current + gestureState.dx;
+                targetX = Math.max(0, Math.min(SCREEN_WIDTH - SLIVI_SIZE, targetX));
+
+                if (isTurbRef.current) {
+                    sliviX.current += (targetX - sliviX.current) * 0.1;
+                } else {
+                    sliviX.current = targetX;
+                }
             },
         })
     ).current;
 
-    // Usa uma Ref para acessar o estado isTurbulence atualizado dentro do PanResponder
-    const isTurbRef = useRef(isTurbulence);
-    useEffect(() => { isTurbRef.current = isTurbulence; }, [isTurbulence]);
+    /* =====================
+       COLISÃO E EFEITOS
+    ===================== */
+    function processItemEffect(item: GameItem, collided: boolean) {
 
-    function handleSwipe(dx: number, dy: number) {
-        // 1. MOVIMENTO PESADO: Custo de energia dobra na turbulência
-        const currentCost = isTurbRef.current ? ENERGY_COST_PER_SWIPE * 2 : ENERGY_COST_PER_SWIPE;
+        if (item.category === 'POSITIVE') {
+            if (collided) {
+                let basePoints = item.subType === 'ESTRELA' ? 50 : (item.subType === 'FRUTA' ? 100 : 10);
+                let emotionGain = item.subType === 'ESTRELA' ? 0 : 5;
 
-        if (energy < currentCost) return; // Sem energia
-        setEnergy(e => Math.max(0, e - currentCost));
+                // ⚡ Como a energia cai sozinha, todos os itens positivos curam um pouquinho pra ajudar
+                if (item.subType === 'ESTRELA') setEnergy(e => Math.min(MAX_ENERGY, e + 40));
+                else if (item.subType === 'FRUTA') setEnergy(e => Math.min(MAX_ENERGY, e + 10));
+                else setEnergy(e => Math.min(MAX_ENERGY, e + 3));
 
-        // 2. MOVIMENTO PESADO: Distância necessária do arrasto aumenta na turbulência
-        const swipeThreshold = isTurbRef.current ? 50 : 30;
+                const turbulenceMult = isTurbRef.current ? 2.5 : 1.0;
+                setScore(s => s + Math.floor(basePoints * combo * config.current.scoreBaseMult * turbulenceMult));
+                setCombo(c => Math.min(10, c + 0.2));
+                setInternalEmotionValue(v => Math.min(100, v + emotionGain));
 
-        const isHorizontal = Math.abs(dx) > Math.abs(dy);
-
-        setItems(prevItems => {
-            const newItems = [...prevItems];
-            const targets = newItems
-                .filter(i => i.active)
-                .map(i => ({ ...i, dist: Math.sqrt(Math.pow(CENTER_X - i.x, 2) + Math.pow(CENTER_Y - i.y, 2)) }))
-                .filter(i => i.dist < 180)
-                .sort((a, b) => a.dist - b.dist);
-
-            if (targets.length === 0) return newItems;
-
-            const target = targets[0];
-            const targetIndex = newItems.findIndex(i => i.id === target.id);
-
-            let isCorrectAction = false;
-
-            const itemIsLeft = target.x < CENTER_X;
-            const itemIsTop = target.y < CENTER_Y;
-
-            const swipeLeft = dx < -swipeThreshold;
-            const swipeRight = dx > swipeThreshold;
-            const swipeUp = dy < -swipeThreshold;
-            const swipeDown = dy > swipeThreshold;
-
-            // Se o swipe não atingiu a força necessária (threshold), falha automaticamente
-            if (!swipeLeft && !swipeRight && !swipeUp && !swipeDown) {
-                setCombo(1);
-                return newItems;
-            }
-
-            if (isHorizontal) {
-                if (target.category === 'POSITIVE') {
-                    if (itemIsLeft && swipeLeft) isCorrectAction = true;
-                    if (!itemIsLeft && swipeRight) isCorrectAction = true;
-                } else {
-                    if (itemIsLeft && swipeRight) isCorrectAction = true;
-                    if (!itemIsLeft && swipeLeft) isCorrectAction = true;
-                }
-            } else {
-                if (target.category === 'POSITIVE') {
-                    if (itemIsTop && swipeUp) isCorrectAction = true;
-                    if (!itemIsTop && swipeDown) isCorrectAction = true;
-                } else {
-                    if (itemIsTop && swipeDown) isCorrectAction = true;
-                    if (!itemIsTop && swipeUp) isCorrectAction = true;
-                }
-            }
-
-            if (isCorrectAction) {
-                processItemEffect(target, true);
-                newItems[targetIndex].active = false;
+                setStats(s => ({
+                    ...s,
+                    total_boxes: s.total_boxes + 1,
+                    bonus_boxes:
+                        item.subType === 'FRUTA' || item.subType === 'ESTRELA'
+                            ? s.bonus_boxes + 1
+                            : s.bonus_boxes,
+                    during_fever: isTurbRef.current ? true : s.during_fever,
+                }));
             } else {
                 setCombo(1);
             }
+        } else {
+            if (collided) {
+                setCombo(1);
+                setInternalEmotionValue(v => Math.max(0, v - 10));
+                setScore(s => Math.max(0, s - 30));
 
-            return newItems.filter(i => i.active);
-        });
-    }
+                setStats(s => ({
+                    ...s,
+                    ghost_boxes: item.subType === 'LAMA'
+                        ? s.ghost_boxes + 1
+                        : s.ghost_boxes
+                }));
 
-    function processItemEffect(item: GameItem, success: boolean) {
-        if (!success) {
-            setCombo(1);
-            setInternalEmotionValue(v => Math.max(0, v - 10));
-            if (item.category === 'NEGATIVE') {
-                setScore(s => Math.max(0, s - 50));
                 if (item.subType === 'TEMPESTADE') setEnergy(e => Math.max(0, e - 50));
                 if (item.subType === 'ESPINHO') setEnergy(e => Math.max(0, e - 20));
+
+                // ❤️ Punição severa: bateu no negativo, perde uma vida!
+                setLives(l => l - 1);
+                Vibration.vibrate(200);
+            } else {
+                setScore(s => s + 5);
             }
-            return;
         }
-
-        let basePoints = 0;
-        let emotionGain = 0;
-
-        switch (item.subType) {
-            case 'ORVALHO': basePoints = 10; emotionGain = 5; break;
-            case 'ESTRELA': basePoints = 50; setEnergy(e => Math.min(MAX_ENERGY, e + 40)); break;
-            case 'FRUTA': basePoints = 100; emotionGain = 10; break;
-            case 'LAMA': basePoints = 20; break;
-            case 'TEMPESTADE':
-            case 'ESPINHO': basePoints = 50; break;
-        }
-
-        // MULTIPLICADOR DE RISCO: Se estiver na turbulência, ganha muito mais pontos
-        const turbulenceMultiplier = isTurbRef.current ? 2.5 : 1.0;
-        const points = Math.floor(basePoints * combo * config.current.scoreBaseMult * turbulenceMultiplier);
-
-        setScore(s => s + points);
-        setCombo(c => Math.min(10, c + 0.2));
-        setInternalEmotionValue(v => Math.min(100, v + emotionGain));
     }
 
     /* =====================
-       GAME LOOP
+       GAME LOOP E FÍSICA
     ===================== */
     useEffect(() => {
         if (!started || gameOver) return;
 
         const loop = setInterval(() => {
-            setEnergy(e => Math.min(MAX_ENERGY, e + ENERGY_REGEN));
+            // 📉 Decaimento constante de energia
+            setEnergy(e => Math.max(0, e + ENERGY_DECAY));
 
             setItems(prev => {
                 const nextItems: GameItem[] = [];
+
                 prev.forEach(item => {
-                    // ITENS AFETADOS PELA CORRENTEZA: vx e vy são multiplicados pela velocidade do rio
-                    // Fator da turbulência
-                    const turbulenceFactor = isTurbulence ? 2.2 : 1.0;
+                    item.y += item.vy * riverSpeed;
 
-                    // Movimento base do rio
-                    item.x += item.vx * riverSpeed * turbulenceFactor;
-                    item.y += item.vy * riverSpeed * turbulenceFactor;
+                    const hitX = item.x < sliviX.current + SLIVI_SIZE && item.x + ITEM_SIZE > sliviX.current;
+                    const hitY = item.y < SLIVI_Y + SLIVI_SIZE && item.y + ITEM_SIZE > SLIVI_Y;
 
-                    // 🌊 Deriva (correnteza)
-                    item.driftSeed += 0.05 * riverSpeed;
-
-                    // 🎨 (OPCIONAL, MAS LINDO) — comportamento por tipo
-                    const driftMultiplier =
-                        item.subType === 'ESPINHO' ? 1.6 :
-                            item.subType === 'LAMA' ? 0.6 :
-                                1.0;
-
-                    const drift =
-                        Math.sin(item.driftSeed) *
-                        item.driftStrength *
-                        driftMultiplier *
-                        (isTurbulence ? 2.0 : 1.0);
-
-                    // Aplica deriva perpendicular ao movimento
-                    item.x += -item.vy * drift;
-                    item.y += item.vx * drift;
-
-                    const dist = Math.sqrt(Math.pow(CENTER_X - item.x, 2) + Math.pow(CENTER_Y - item.y, 2));
-
-                    if (dist < SLIVI_SIZE / 2) {
+                    if (hitX && hitY) {
+                        processItemEffect(item, true);
+                    } else if (item.y > SCREEN_HEIGHT) {
                         processItemEffect(item, false);
                     } else {
                         nextItems.push(item);
                     }
                 });
+
                 return nextItems;
             });
         }, 16);
 
         return () => clearInterval(loop);
-    }, [started, gameOver, riverSpeed]); // Depende do riverSpeed para atualizar a velocidade instantaneamente
+    }, [started, gameOver, riverSpeed]);
 
     /* =====================
-       SPAWNER
+       SPAWNER INTELIGENTE E PROGRESSIVO
     ===================== */
     useEffect(() => {
         if (!started || gameOver) return;
 
-        // A taxa de geração de itens também acompanha a velocidade do rio
-        const currentSpawnRate = SPAWN_RATE_BASE / (config.current.speedMult * riverSpeed);
+        let timeoutId: NodeJS.Timeout;
 
-        const interval = setInterval(() => {
-            const angle = Math.random() * 2 * Math.PI;
-            const radius = Math.max(SCREEN_WIDTH, SCREEN_HEIGHT) / 1.5;
+        const spawnItem = () => {
+            if (!startedRef.current || gameOverRef.current) return;
 
-            const startX = CENTER_X + Math.cos(angle) * radius;
-            const startY = CENTER_Y + Math.sin(angle) * radius;
+            const currentScore = scoreRef.current;
 
-            const dx = CENTER_X - startX;
-            const dy = CENTER_Y - startY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
+            // 🚀 DIFICULDADE PROGRESSIVA (Aumenta a velocidade e frequência até um limite de 3.5x)
+            const difficultyMultiplier = Math.min(3.5, 1 + (currentScore / 1500));
+            const currentSpawnRate = SPAWN_RATE_BASE / (config.current.speedMult * riverSpeed * difficultyMultiplier);
+            const baseSpeed = ITEM_SPEED_BASE * config.current.speedMult * difficultyMultiplier;
 
-            const baseSpeed = ITEM_SPEED_BASE * config.current.speedMult;
+            // 😈 PROPORÇÃO PROGRESSIVA DE INIMIGOS (Começa em 40% chance de negativo, vai até 85%)
+            const negativeChance = Math.min(0.85, 0.4 + (currentScore / 3000));
 
+            const startX = Math.random() * (SCREEN_WIDTH - ITEM_SIZE);
+            const startY = -ITEM_SIZE;
             const rand = Math.random();
+
             let cat: ItemCategory = 'POSITIVE';
             let sub: ItemSubType = 'ORVALHO';
 
-            if (rand > 0.6) {
+            if (rand < negativeChance) {
                 cat = 'NEGATIVE';
-                if (rand > 0.9) sub = 'ESPINHO';
-                else if (rand > 0.8) sub = 'TEMPESTADE';
+                const subRand = Math.random();
+                if (subRand > 0.7) sub = 'ESPINHO';
+                else if (subRand > 0.4) sub = 'TEMPESTADE';
                 else sub = 'LAMA';
             } else {
-                if (rand < 0.1) sub = 'FRUTA';
-                else if (rand < 0.25) sub = 'ESTRELA';
+                const subRand = Math.random();
+                if (subRand < 0.15) sub = 'FRUTA';
+                else if (subRand < 0.3) sub = 'ESTRELA';
                 else sub = 'ORVALHO';
             }
 
             setItems(prev => [...prev, {
-                id: Date.now(),
+                id: Date.now() + Math.random(),
                 x: startX,
                 y: startY,
-                vx: (dx / dist) * baseSpeed,
-                vy: (dy / dist) * baseSpeed,
-                // 🌊 Correnteza
-                driftSeed: Math.random() * Math.PI * 2,
-                driftStrength: Math.random() * 0.8 + 0.4,
+                vy: baseSpeed,
                 category: cat,
                 subType: sub,
                 active: true
             }]);
 
-        }, currentSpawnRate);
+            // Chama o próximo spawn baseado no tempo dinâmico calculado agora!
+            timeoutId = setTimeout(spawnItem, currentSpawnRate);
+        };
 
-        return () => clearInterval(interval);
+        // Inicia o ciclo
+        timeoutId = setTimeout(spawnItem, SPAWN_RATE_BASE);
+
+        return () => clearTimeout(timeoutId);
     }, [started, gameOver, riverSpeed]);
 
     /* =====================
@@ -383,21 +373,77 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
         setCombo(1);
         setItems([]);
         setEnergy(MAX_ENERGY);
+        setLives(MAX_LIVES); // Reseta os corações
+        refreshObjectives();
+
+        setStats({
+            total_boxes: 0,
+            bonus_boxes: 0,
+            magnetic_boxes: 0,
+            ghost_boxes: 0,
+            used_magnet: false,
+            during_fever: false,
+            run_duration: 0,
+        });
+
+
         setIsTurbulence(false);
         setRiverSpeed(1.0);
+        sliviX.current = SCREEN_WIDTH / 2 - SLIVI_SIZE / 2;
         startTime.current = Date.now();
     }
+
+    const refreshObjectives = async () => {
+        try {
+            const data = await getObjectives('maestro');
+            setObjectives(data);
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
 
     function endGame() {
         setGameOver(true);
         setStarted(false);
-        Vibration.cancel();
 
-        const duration = startTime.current ? Math.round((Date.now() - startTime.current) / 1000) : 0;
-        //   sendGameScore({
-        //       score, duration, finalEmotionValue: internalEmotionValue, finalEmotionState: currentEmotion
-        //   });
+        const duration =
+            startTime.current
+                ? Math.floor((Date.now() - startTime.current) / 1000)
+                : 0;
+
+        const payload = {
+            game: 'maestro',
+            score,
+            duration,
+            finalEmotionValue: internalEmotionValue,
+            finalEmotionState: currentEmotion,
+            stats: {
+                ...stats,
+                run_duration: duration,
+            },
+        }
+
+        sendGameScore({
+            game: 'maestro',
+            score,
+            duration,
+            finalEmotionValue: internalEmotionValue,
+            finalEmotionState: currentEmotion,
+
+            stats: {
+                payload,
+
+                run_duration: duration
+            }
+        });
+
+        Vibration.cancel();
     }
+
+    useEffect(() => {
+        refreshObjectives();
+    }, []);
 
     /* =====================
        RENDER
@@ -426,35 +472,97 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
         }
     };
 
-    return (
-        <View style={[styles.container, isTurbulence && styles.turbulenceBg]} {...panResponder.panHandlers}>
-            <River
-                isRunning={started && !gameOver}
-                isTurbulence={isTurbulence}
-            />
-            {/* Aviso Visual da Turbulência */}
-            {isTurbulence && <View style={styles.turbulenceWarning} />}
+    function getObjectiveTitle(type: string, target: number, description: string): string {
+        const titles: Record<string, string> = {
+            'score': `Faça ${target} pontos`,
+            'total_boxes': `Colete ${target} itens positivos`, // No Maestro são os orvalhos/frutas/estrelas
+            'bonus_boxes': `Colete ${target} itens especiais`, // Frutas ou estrelas
+            'ghost_boxes': `Esbarre em ${target} lamas`,
+            'run_duration': `Sobreviva por ${target} segundos`
+        };
+        return titles[description] || `Objetivo: ${description}`;
+    }
 
-            <View style={styles.hud}>
-                <Text style={styles.scoreText}>{score}</Text>
-                <Text style={styles.comboText}>x{combo.toFixed(1)}</Text>
+    function isObjectiveComplete(obj: GameObjective): boolean {
+        // 1. Verifica Condições (Ex: não pode ter pego turbulência)
+        if (obj.conditions) {
+            try {
+                const conds: ObjectiveCondition = JSON.parse(obj.conditions);
+                if (conds.during_fever === false && stats.during_fever === true) return false;
+            } catch (e) {
+                console.error("Erro ao fazer parse das condições do objetivo", e);
+            }
+        }
+
+        // 2. Mapeia o progresso numérico (lendo do state 'stats' e 'score')
+        let sessionValue = 0;
+
+        switch (obj.type) {
+            case 'score': sessionValue = score; break;
+            case 'total_boxes': sessionValue = stats.total_boxes; break;
+            case 'bonus_boxes': sessionValue = stats.bonus_boxes; break;
+            case 'ghost_boxes': sessionValue = stats.ghost_boxes; break;
+            case 'run_duration':
+                sessionValue = startTime.current ? Math.floor((Date.now() - startTime.current) / 1000) : 0;
+                break;
+            default: sessionValue = 0;
+        }
+
+        return (obj.current_value + sessionValue) >= obj.target_value;
+    }
+
+    return (
+        <View style={[styles.container, isTurbulence && styles.turbulenceBg]}>
+            <River isRunning={started && !gameOver} isTurbulence={isTurbulence} />            {isTurbulence && <View style={styles.turbulenceWarning} />}
+
+            <View style={styles.hudTop}>
+                <View>
+                    <Text style={styles.hudText}>Emoção Atual: {currentEmotion}(x{combo.toFixed(1)})</Text>
+                    <View style={{ flexDirection: 'row', marginTop: 4 }}>
+                        {Array.from({ length: MAX_LIVES }).map((_, i) => (
+                            <Text key={i} style={{ opacity: i < lives ? 1 : 0.2, marginHorizontal: 2 }}>
+                                ❤️
+                            </Text>
+                        ))}
+                    </View>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.scoreText}>{score}</Text>
+                    {objectives.map(obj => {
+                        const completed = isObjectiveComplete(obj);
+                        const title = getObjectiveTitle(obj.type, obj.target_value);
+
+                        return (
+                            <View key={obj.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                                <Text style={[styles.hudText, { fontSize: 12, opacity: completed ? 0.6 : 1 }]}>
+                                    {title}
+                                </Text>
+                                {completed && <Text style={{ color: '#4dff88', marginLeft: 6, fontWeight: 'bold' }}>✓</Text>}
+                            </View>
+                        );
+                    })}                </View>
             </View>
 
-            <View style={styles.centerArea}>
-                <View style={[styles.energyRing, {
-                    borderColor: energy < 30 ? 'red' : '#4dff88',
-                    opacity: energy / 100
-                }]} />
-                <Slivi emotion={currentEmotion} size={SLIVI_SIZE * 1.5} />
+            <View
+                {...panResponder.panHandlers}
+                style={[styles.sliviArea, { left: sliviX.current, top: SLIVI_Y }]}
+            >
+                {/* O anel agora serve como alerta de energia vital também */}
+                <View style={[styles.energyRing, { borderColor: energy < 30 ? 'red' : '#4dff88', opacity: energy / 100 }]} />
+                <Slivi emotion={currentEmotion} size={SLIVI_SIZE} />
             </View>
 
             {items.map(item => (
-                <View key={item.id} style={[styles.item, {
-                    left: item.x - ITEM_SIZE / 2,
-                    top: item.y - ITEM_SIZE / 2,
-                    backgroundColor: getItemColor(item.subType),
-                    borderColor: item.category === 'POSITIVE' ? '#fff' : '#000'
-                }]}>
+                <View
+                    key={item.id}
+                    pointerEvents="none"
+                    style={[styles.item, {
+                        left: item.x,
+                        top: item.y,
+                        backgroundColor: getItemColor(item.subType),
+                        borderColor: item.category === 'POSITIVE' ? '#fff' : '#000'
+                    }]}
+                >
                     <Text style={{ fontSize: 20 }}>{getItemIcon(item.subType)}</Text>
                 </View>
             ))}
@@ -467,8 +575,9 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
 
             {!started && !gameOver && (
                 <View style={styles.overlay}>
-                    <Text style={styles.title}>Maestro do Orvalho</Text>
+                    <Text style={styles.title}>Corrida do Orvalho</Text>
                     <Text style={styles.subTitle}>Slivi está {initialEmotion}</Text>
+                    <Text style={styles.desc}>Pegue 💧 para energia e desvie de 💩{'\n'}Cuidado: A energia cai com o tempo e os itens negativos tiram vidas!</Text>
                     <TouchableOpacity onPress={startGame} style={styles.btn}>
                         <Text style={styles.btnText}>COMEÇAR</Text>
                     </TouchableOpacity>
@@ -479,7 +588,9 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
                 <View style={styles.overlay}>
                     <Text style={styles.title}>Fim de Jogo</Text>
                     <Text style={styles.scoreBig}>{score}</Text>
-                    <Text style={styles.desc}>Slivi terminou {currentEmotion}</Text>
+                    <Text style={styles.desc}>
+                        {lives <= 0 ? "Slivi perdeu todos os corações!" : (energy <= 0 ? "Slivi ficou sem energia!" : `Slivi terminou ${currentEmotion}`)}
+                    </Text>
                     <TouchableOpacity onPress={startGame} style={styles.btn}>
                         <Text style={styles.btnText}>JOGAR NOVAMENTE</Text>
                     </TouchableOpacity>
@@ -494,24 +605,46 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
 ===================== */
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#121212' },
-    turbulenceBg: { backgroundColor: '#0a1a2a' }, // Escurece um pouco o fundo na turbulência
-    turbulenceWarning: {
-        ...StyleSheet.absoluteFillObject,
-        borderWidth: 5,
-        borderColor: 'rgba(255, 255, 255, 0.2)',
-    },
-    hud: { position: 'absolute', top: 50, width: '100%', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 30 },
-    scoreText: { color: '#fff', fontSize: 32, fontWeight: 'bold' },
+    turbulenceBg: { backgroundColor: '#0a1a2a' },
+    turbulenceWarning: { ...StyleSheet.absoluteFillObject, borderWidth: 5, borderColor: 'rgba(255, 255, 255, 0.2)' },
+    hudTop: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 50, paddingHorizontal: 20, zIndex: 20 },
+    hudText: { color: '#fff', fontSize: 14, fontWeight: 'bold', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4 },
+
+    scoreText: { color: '#fff', fontSize: 24, fontWeight: '900', textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4 },
     comboText: { color: '#ffd700', fontSize: 24, fontWeight: 'bold' },
     scoreBig: { color: '#ffd700', fontSize: 60, fontWeight: 'bold', marginVertical: 20 },
-    centerArea: { position: 'absolute', left: CENTER_X - 75, top: CENTER_Y - 75, width: 150, height: 150, justifyContent: 'center', alignItems: 'center' },
-    energyRing: { position: 'absolute', width: 140, height: 140, borderRadius: 70, borderWidth: 4, borderStyle: 'dashed' },
-    item: { position: 'absolute', width: ITEM_SIZE, height: ITEM_SIZE, borderRadius: ITEM_SIZE / 2, justifyContent: 'center', alignItems: 'center', borderWidth: 2 },
-    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+
+    sliviArea: {
+        position: 'absolute',
+        width: SLIVI_SIZE,
+        height: SLIVI_SIZE,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 5
+    },
+    energyRing: {
+        position: 'absolute',
+        width: SLIVI_SIZE + 20,
+        height: SLIVI_SIZE + 20,
+        borderRadius: (SLIVI_SIZE + 20) / 2,
+        borderWidth: 4,
+        borderStyle: 'dashed'
+    },
+    item: {
+        position: 'absolute',
+        width: ITEM_SIZE,
+        height: ITEM_SIZE,
+        borderRadius: ITEM_SIZE / 2,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2
+    },
+
+    overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20, zIndex: 20 },
     title: { color: '#4dff88', fontSize: 30, fontWeight: 'bold', marginBottom: 10 },
     subTitle: { color: '#fff', fontSize: 20, marginBottom: 20, opacity: 0.8 },
     desc: { color: '#ccc', fontSize: 16, textAlign: 'center', marginBottom: 40, lineHeight: 24 },
     btn: { backgroundColor: '#4dff88', paddingVertical: 15, paddingHorizontal: 40, borderRadius: 30 },
     btnText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
-    exitBtn: { position: 'absolute', bottom: 40, alignSelf: 'center' }
+    exitBtn: { position: 'absolute', bottom: 40, alignSelf: 'center', zIndex: 10 }
 });

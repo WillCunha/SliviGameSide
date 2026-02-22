@@ -16,7 +16,7 @@ export default function LoadingScreen() {
 
     const [error, setError] = useState("");
 
-    const imgBg = require('../assets/images/splash-slivi.png');
+    const imgBg = require('../assets/images/splash-screen.png');
 
     useEffect(() => {
         if (!token) return;

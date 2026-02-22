@@ -25,7 +25,8 @@ export async function apiRequest<T>(
   });
 
   const json: ApiResponse<T> = await response.json();
-  console.log(json)
+
+  console.log(json);
   if (!json.success) {
     throw new Error(json.error);
   }

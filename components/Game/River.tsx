@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Image, StyleSheet, View } from 'react-native';
+import { Animated, Dimensions, Easing, Image, StyleSheet, View } from 'react-native';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface RiverProps {
   isRunning: boolean;
@@ -17,7 +19,7 @@ export default function River({ isRunning, isTurbulence }: RiverProps) {
     Animated.loop(
       Animated.timing(anim, {
         toValue: 1,
-        duration: isTurbulence ? 1400 : 4200,
+        duration: isTurbulence ? 1400 : 3500, // Ajuste a velocidade do rio aqui
         easing: Easing.linear,
         useNativeDriver: true,
       })
@@ -26,9 +28,10 @@ export default function River({ isRunning, isTurbulence }: RiverProps) {
     return () => anim.stopAnimation();
   }, [isRunning, isTurbulence]);
 
+  // A água precisa descer. O translateY vai de 0 até a altura exata de uma tela.
   const translateY = anim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 300],
+    outputRange: [0, SCREEN_HEIGHT],
   });
 
   return (
@@ -38,10 +41,11 @@ export default function River({ isRunning, isTurbulence }: RiverProps) {
           styles.stream,
           {
             transform: [{ translateY }],
-            opacity: isTurbulence ? 0.9 : 0.7,
+            opacity: isTurbulence ? 0.9 : 0.6,
           },
         ]}
       >
+        {/* Renderizamos DUAS imagens, cada uma com a altura exata da tela */}
         <Image source={require('@/assets/images/components/river/river.png')} style={styles.image} />
         <Image source={require('@/assets/images/components/river/river.png')} style={styles.image} />
       </Animated.View>
@@ -55,20 +59,21 @@ const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
+    backgroundColor: '#053d4f', // Uma cor de fundo base para o rio
   },
   stream: {
     position: 'absolute',
-    top: -300,
+    top: -SCREEN_HEIGHT, // Começa exatamente uma tela para cima
     width: '100%',
-    height: 600,
+    height: SCREEN_HEIGHT * 2, // Altura total de duas telas
   },
   image: {
     width: '100%',
-    height: 300,
-    resizeMode: 'repeat',
+    height: SCREEN_HEIGHT,
+    resizeMode: 'cover', // Cover garante que preencha as bordas sem deixar espaços em branco
   },
   turbulenceOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 40, 70, 0.25)',
+    backgroundColor: 'rgba(0, 40, 70, 0.35)',
   },
 });

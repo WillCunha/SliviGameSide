@@ -23,7 +23,6 @@ export const EYES_BY_EMOTION: Record<Emotion, EyeFrame[]> = {
     { src: require('../../../assets/images/personagem/eyes/olho_bravo_baixo.png'), weight: 22 },
     { src: require('../../../assets/images/personagem/eyes/olho_bravo_cima.png'), weight: 21 },
     { src: require('../../../assets/images/personagem/eyes/olho_bravo_direito.png'), weight: 35 },
-    { src: require('../../../assets/images/personagem/eyes/olho_bravo_esquerdo.png'), weight: 35 },
   ],
 
   CANSADO: [
