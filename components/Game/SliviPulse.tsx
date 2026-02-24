@@ -375,7 +375,7 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
           bonus_boxes: bonusBoxes,
           magnetic_boxes: magneticBoxes,
           ghost_boxes: ghostBoxes,
-
+          score: score,
           used_magnet: usedMagnetInRun.current,
           during_fever: usedFeverInRun.current,
 
@@ -540,7 +540,7 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
             {objectives.map(obj => {
               const completed = isObjectiveComplete(obj);
               return (
-                <View key={obj.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                <View key={obj.id} style={{ alignItems: 'flex-end', marginBottom: 2 }}>
                   <Text style={[styles.hudText, { fontSize: 12, opacity: completed ? 0.6 : 1 }]}>
                     Objetivo:
                   </Text>
@@ -566,7 +566,11 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
         {/* --- SLIVI --- */}
         <View style={{ position: 'absolute', top: y.current, left: SLIVI_X, width: SLIVI_SIZE, height: SLIVI_SIZE }}>
           {isFever && <View style={styles.aura} />}
-          <Slivi emotion={currentEmotion} size={300} />
+          <Slivi
+            emotion={currentEmotion}
+            size={300}
+            clothingItems={[require('@/assets/images/clothes/pants/black_hoodie_simplev2.png')]}
+          />
         </View>
 
         {/* --- PARTICLES --- */}

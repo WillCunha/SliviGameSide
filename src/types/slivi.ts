@@ -4,4 +4,5 @@ export interface SliviState {
   isSleeping: any;
   emotion: Emotion;
   states: any;
+  clothing: any;
 }

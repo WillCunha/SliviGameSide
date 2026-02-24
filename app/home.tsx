@@ -17,9 +17,11 @@ import FoodModal from '@/src/components/foods/foodModal';
 import { router, useLocalSearchParams } from 'expo-router';
 
 // --- IMPORTS DE SERVIÇOS E DADOS ---
+import ClothesModal from '@/components/Modal/Clothes';
 import Notification from '@/components/Modal/Notification';
 import StatesModal from '@/components/Modal/States';
 import { syncUserLocation, WeatherState } from '@/src/api/weatherClient';
+import { CLOTHES_IMAGES } from '@/src/components/clothes/clothesMap';
 import { FOOD_IMAGES } from '@/src/components/foods/foodMap';
 import { feedSlivi } from '@/src/services/feedService';
 import { fetchNotifications, SliviNotification } from '@/src/services/notificationService';
@@ -27,7 +29,7 @@ import { sleepSlivi, wakeSlivi } from '@/src/services/sleepServices';
 import { fetchSliviState } from '@/src/services/sliviService';
 import { generateSpeech } from '@/src/services/speechService';
 import { Emotion } from '@/src/types/emotions';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
@@ -77,6 +79,7 @@ export default function HomeScreen() {
   const [currentFoodKey, setCurrentFoodKey] = useState<string | null>(null);
   const [currentFoodId, setCurrentFoodId] = useState<number | null>(null);
   const [foodModalVisible, setFoodModalVisible] = useState(false);
+  const [clothesModalVisible, setClothesModalVisible] = useState(false);
 
   // --- ESTADO DE NOTIFICAÇÕES E STATUS ---
   const [notifications, setNotifications] = useState<SliviNotification[]>([]);
@@ -87,6 +90,9 @@ export default function HomeScreen() {
   const [sliviStates, setSliviStates] = useState<{
     HUNGER: number; ENERGY: number; SLEEP: number; TEMPERATURE: number; FUN: number; BRAVO: number;
   } | null>(null);
+
+  const [sliviClothing, setSliviClothing] = useState<Record<string, string> | null>(null);
+
   const [statesModalVisible, setStatesModalVisible] = useState(false);
 
   // --- NOVOS ESTADOS PARA FALA ---
@@ -143,6 +149,10 @@ export default function HomeScreen() {
       const state = await fetchSliviState(token);
       setEmotion(state.emotion);
       setSliviStates(state.states);
+      if (state.clothing) {
+        setSliviClothing(state.clothing);
+      }
+
       if (state.isSleeping) {
         setIsLightOn(false);
         setSleepState('DORMINDO');
@@ -330,6 +340,14 @@ export default function HomeScreen() {
 
   const currentBgImage = WEATHER_IMAGES[weather.condition] || WEATHER_IMAGES.sun;
 
+  // Pega os caminhos (ex: "/pants/...") do estado sliviClothing 
+  // e busca a imagem correspondente no nosso dicionário CLOTHES_IMAGES.
+  const resolvedClothingItems = sliviClothing
+    ? Object.values(sliviClothing) // Pega apenas os valores: ["/jackets/...", "/pants/..."]
+      .map(path => CLOTHES_IMAGES[path]) // Troca o texto pelo require da imagem
+      .filter(Boolean) // Remove itens que retornem 'undefined' (caso a API mande uma roupa que você ainda não mapeou)
+    : []; // Se sliviClothing for null, retorna um array vazio
+
   return (
     <View style={styles.roomWall}>
       {!isLightOn && <View style={styles.darkOverlay} pointerEvents="none" />}
@@ -399,7 +417,7 @@ export default function HomeScreen() {
           emotion={emotion}
           eyeEmotion={sleepState}
           mouthOverride={mouthOverride}
-          clothingItems={[require('@/assets/images/clothes/pants/black_hoodie_simplev2.png')]}
+          clothingItems={resolvedClothingItems} 
         />
 
         {foodVisible && currentSprites.length > 0 && (
@@ -421,6 +439,12 @@ export default function HomeScreen() {
           <Ionicons name="restaurant" size={32} color="#000" />
         </TouchableOpacity>
 
+        <TouchableOpacity onPress={() => {
+           setClothesModalVisible(true);
+        }} style={styles.bottomNavIcon}>
+          <MaterialCommunityIcons name="hanger" size={32} color="#000" />
+        </TouchableOpacity>
+
         {/* Botão Jogar (CTA Principal) */}
         <TouchableOpacity
           style={styles.playButton}
@@ -434,7 +458,7 @@ export default function HomeScreen() {
           }
           }
         >
-          <Text style={styles.playButtonText}>JOGAR{'\n'}SLIVI ON RIVER</Text>
+          <Text style={styles.playButtonText}>JOGAR{'\n'}SLIVI PULSE</Text>
         </TouchableOpacity>
 
         {/* Botão Chat (Teste de Fala) */}
@@ -450,6 +474,7 @@ export default function HomeScreen() {
 
 
       <FoodModal visible={foodModalVisible} onClose={() => setFoodModalVisible(false)} onSelectFood={(food) => startEatingAnimation(food)} />
+      <ClothesModal visible={clothesModalVisible} onClose={() => setClothesModalVisible(false)} onSelectClothes={(food) => startEatingAnimation(food)} />
       {sliviStates && <StatesModal visible={statesModalVisible} onClose={() => setStatesModalVisible(false)} states={sliviStates} />}
       <Notification visible={notifModalVisible} onClose={() => setNotifModalVisible(false)} notifications={notifications} loading={loadingNotifs} />
     </View >
@@ -570,14 +595,14 @@ const styles = StyleSheet.create({
   },
 
   // --- FOOD STYLES ---
-  foodTouch: { position: 'absolute', right: 100, bottom: 140, backgroundColor: 'transparent' },
-  foodImg: { width: 140, height: 140 },
+  foodTouch: { position: 'absolute', right: 100, zIndex: 20, bottom: 140, backgroundColor: 'transparent' },
+  foodImg: { width: 140, height: 140, zIndex: 20 },
 
   // --- BOTTOM NAV BAR STYLES ---
   bottomNavBar: {
     width: '90%',
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'space-around',
     alignItems: 'center',
     marginBottom: 40, // Distância do fundo da tela
     zIndex: 10,
@@ -589,13 +614,13 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 15,
     alignItems: 'center',
-    justifyContent: 'center',
     width: 70,
     height: 70,
+    marginHorizontal: 5,
   },
   playButton: {
     flex: 1,
-    marginHorizontal: 15,
+    marginHorizontal: 5,
     backgroundColor: 'transparent',
     borderWidth: 2,
     borderColor: '#000',

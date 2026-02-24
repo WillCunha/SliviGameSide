@@ -137,6 +137,40 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
         if (started && !gameOver) {
             if (energy <= 0 || lives <= 0) {
                 setGameOver(true);
+
+                const duration =
+                    startTime.current
+                        ? Math.floor((Date.now() - startTime.current) / 1000)
+                        : 0;
+
+
+                const payload = {
+                    game: 'maestro',
+                    score,
+                    duration,
+                    finalEmotionValue: internalEmotionValue,
+                    finalEmotionState: currentEmotion,
+                    stats: {
+                        score: score,
+                        ...stats,
+                        run_duration: duration,
+                    },
+                }
+
+                sendGameScore({
+                    game: 'maestro',
+                    score,
+                    duration,
+                    finalEmotionValue: internalEmotionValue,
+                    finalEmotionState: currentEmotion,
+                    stats: {
+                        score: score,
+                        ...stats,
+                        run_duration: duration,
+                    },
+                });
+
+                console.log("dados do game: ", payload)
             }
         }
     }, [energy, lives, started, gameOver]);
@@ -381,6 +415,7 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
             bonus_boxes: 0,
             magnetic_boxes: 0,
             ghost_boxes: 0,
+            score: 0,
             used_magnet: false,
             during_fever: false,
             run_duration: 0,
@@ -407,36 +442,38 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
         setGameOver(true);
         setStarted(false);
 
-        const duration =
-            startTime.current
-                ? Math.floor((Date.now() - startTime.current) / 1000)
-                : 0;
+           const duration =
+                    startTime.current
+                        ? Math.floor((Date.now() - startTime.current) / 1000)
+                        : 0;
 
-        const payload = {
-            game: 'maestro',
-            score,
-            duration,
-            finalEmotionValue: internalEmotionValue,
-            finalEmotionState: currentEmotion,
-            stats: {
-                ...stats,
-                run_duration: duration,
-            },
-        }
 
-        sendGameScore({
-            game: 'maestro',
-            score,
-            duration,
-            finalEmotionValue: internalEmotionValue,
-            finalEmotionState: currentEmotion,
+                const payload = {
+                    game: 'maestro',
+                    score,
+                    duration,
+                    finalEmotionValue: internalEmotionValue,
+                    finalEmotionState: currentEmotion,
+                    stats: {
+                        score: score,
+                        ...stats,
+                        run_duration: duration,
+                    },
+                }
 
-            stats: {
-                payload,
+                sendGameScore({
+                    game: 'maestro',
+                    score,
+                    duration,
+                    finalEmotionValue: internalEmotionValue,
+                    finalEmotionState: currentEmotion,
+                    stats: {
+                        score: score,
+                        ...stats,
+                        run_duration: duration,
+                    },
+                });
 
-                run_duration: duration
-            }
-        });
 
         Vibration.cancel();
     }
@@ -530,17 +567,19 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
                     <Text style={styles.scoreText}>{score}</Text>
                     {objectives.map(obj => {
                         const completed = isObjectiveComplete(obj);
-                        const title = getObjectiveTitle(obj.type, obj.target_value);
-
                         return (
-                            <View key={obj.id} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
+                            <View key={obj.id} style={{ alignItems: 'flex-end', marginBottom: 2 }}>
                                 <Text style={[styles.hudText, { fontSize: 12, opacity: completed ? 0.6 : 1 }]}>
-                                    {title}
+                                    Objetivo:
                                 </Text>
-                                {completed && <Text style={{ color: '#4dff88', marginLeft: 6, fontWeight: 'bold' }}>✓</Text>}
+                                <Text style={[styles.hudText, { fontSize: 12, opacity: completed ? 0.6 : 1 }]}>
+                                    {obj.title || `${obj.description}`}
+                                </Text>
+                                {completed && <Text style={{ color: COLORS.POSITIVE, marginLeft: 6, fontWeight: 'bold' }}>✓</Text>}
                             </View>
                         );
-                    })}                </View>
+                    })}
+                </View>
             </View>
 
             <View
@@ -549,7 +588,10 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
             >
                 {/* O anel agora serve como alerta de energia vital também */}
                 <View style={[styles.energyRing, { borderColor: energy < 30 ? 'red' : '#4dff88', opacity: energy / 100 }]} />
-                <Slivi emotion={currentEmotion} size={SLIVI_SIZE} />
+                <Slivi
+                    emotion={currentEmotion}
+                    size={SLIVI_SIZE}
+                    clothingItems={[require('@/assets/images/clothes/pants/black_hoodie_simplev2.png')]} />
             </View>
 
             {items.map(item => (
