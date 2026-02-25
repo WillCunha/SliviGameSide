@@ -17,12 +17,14 @@ import FoodModal from '@/src/components/foods/foodModal';
 import { router, useLocalSearchParams } from 'expo-router';
 
 // --- IMPORTS DE SERVIÇOS E DADOS ---
+import AirTrafficAnimation from '@/components/AirTrafficAnimation';
 import ClothesModal from '@/components/Modal/Clothes';
 import Notification from '@/components/Modal/Notification';
 import StatesModal from '@/components/Modal/States';
 import { syncUserLocation, WeatherState } from '@/src/api/weatherClient';
 import { CLOTHES_IMAGES } from '@/src/components/clothes/clothesMap';
 import { FOOD_IMAGES } from '@/src/components/foods/foodMap';
+import { dressService } from '@/src/services/dressService';
 import { feedSlivi } from '@/src/services/feedService';
 import { fetchNotifications, SliviNotification } from '@/src/services/notificationService';
 import { sleepSlivi, wakeSlivi } from '@/src/services/sleepServices';
@@ -301,6 +303,31 @@ export default function HomeScreen() {
     setIsAnimating(false);
   };
 
+
+  const handleSelectClothing = async (clothingItem: any, category: string) => {
+    setClothesModalVisible(false);
+
+    const isAlreadyWearing = sliviClothing[category] === clothingItem.slug;
+
+    // Decide a ação ANTES de mandar pro servidor
+    const actionToDo = isAlreadyWearing ? 'REMOVE' : 'EQUIP';
+
+    // 1. Atualiza a tela na hora (Otimista)
+    setSliviClothing(prev => ({
+      ...prev,
+      [category]: isAlreadyWearing ? null : clothingItem.slug
+    }));
+
+    try {
+      await dressService(clothingItem.slug, actionToDo);
+    } catch (error) {
+      console.error("Erro ao processar troca de roupa:", error);
+      Alert.alert("Erro", "Não foi possível atualizar o visual.");
+      loadState();
+    }
+
+  };
+
   async function handleLogout() {
     Alert.alert('Sair', 'Deseja realmente sair da sua conta?', [
       { text: 'Cancelar', style: 'cancel' },
@@ -386,6 +413,7 @@ export default function HomeScreen() {
       {/* --- CORPO (CENTRO) --- */}
       <View style={styles.windowWrapper}>
         <Image source={currentBgImage} style={styles.skyBackground} resizeMode='stretch' />
+        <AirTrafficAnimation />
         {weather.condition === 'rain' && (
           <View style={styles.weatherLayer}>
             <RainAnimation />
@@ -417,7 +445,7 @@ export default function HomeScreen() {
           emotion={emotion}
           eyeEmotion={sleepState}
           mouthOverride={mouthOverride}
-          clothingItems={resolvedClothingItems} 
+          clothingItems={resolvedClothingItems}
         />
 
         {foodVisible && currentSprites.length > 0 && (
@@ -440,14 +468,16 @@ export default function HomeScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => {
-           setClothesModalVisible(true);
+          if (isLightOn) {
+            setClothesModalVisible(true);
+          }
         }} style={styles.bottomNavIcon}>
           <MaterialCommunityIcons name="hanger" size={32} color="#000" />
         </TouchableOpacity>
 
         {/* Botão Jogar (CTA Principal) */}
         <TouchableOpacity
-          style={styles.playButton}
+          style={styles.bottomNavIcon}
           onPress={() => {
             if (isLightOn) {
               router.push({
@@ -458,7 +488,7 @@ export default function HomeScreen() {
           }
           }
         >
-          <Text style={styles.playButtonText}>JOGAR{'\n'}SLIVI PULSE</Text>
+          <Ionicons name="game-controller-sharp" size={32} color="#000" />
         </TouchableOpacity>
 
         {/* Botão Chat (Teste de Fala) */}
@@ -474,8 +504,8 @@ export default function HomeScreen() {
 
 
       <FoodModal visible={foodModalVisible} onClose={() => setFoodModalVisible(false)} onSelectFood={(food) => startEatingAnimation(food)} />
-      <ClothesModal visible={clothesModalVisible} onClose={() => setClothesModalVisible(false)} onSelectClothes={(food) => startEatingAnimation(food)} />
-      {sliviStates && <StatesModal visible={statesModalVisible} onClose={() => setStatesModalVisible(false)} states={sliviStates} />}
+      <ClothesModal visible={clothesModalVisible} onClose={() => setClothesModalVisible(false)} onSelectClothes={handleSelectClothing} />
+      {sliviStates && <StatesModal visible={statesModalVisible} onClose={() => setStatesModalVisible(false)} states={sliviStates} emotion={emotion}/>}
       <Notification visible={notifModalVisible} onClose={() => setNotifModalVisible(false)} notifications={notifications} loading={loadingNotifs} />
     </View >
   );

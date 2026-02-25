@@ -4,10 +4,11 @@ import {
   FlatList,
   Image,
   Modal,
+  SectionList,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 import { CLOTHES_IMAGES } from "@/src/components/clothes/clothesMap";
@@ -16,7 +17,7 @@ import { fetchClothes } from "@/src/services/clothesService";
 type Props = {
   visible: boolean;
   onClose: () => void;
-  onSelectClothes: (food: any) => void;
+  onSelectClothes: (clothing: any, category: string) => void;
 };
 
 export default function ClothesModal({ visible, onClose, onSelectClothes }: Props) {
@@ -32,8 +33,16 @@ export default function ClothesModal({ visible, onClose, onSelectClothes }: Prop
   async function loadClothes() {
     try {
       setLoading(true);
+
       const result = await fetchClothes();
-      setClothes(result);
+      // result = { PANTS: [...], JACKET: [...] }
+
+      const sections = Object.entries(result).map(([category, items]) => ({
+        title: category,
+        data: items as any[],
+      }));
+
+      setClothes(sections);
     } catch (err) {
       console.error("Erro ao carregar o guarda-roupas.", err);
     } finally {
@@ -46,32 +55,49 @@ export default function ClothesModal({ visible, onClose, onSelectClothes }: Prop
       <View style={styles.overlay}>
         <View style={styles.container}>
 
-          <Text style={styles.title}>Selecione uma roupa.</Text>
+          <Text style={styles.title}>Guarda Roupas</Text>
+          <Text style={styles.subTitle}>Selecione uma roupa:</Text>
 
           {loading ? (
             <ActivityIndicator size="large" />
           ) : (
-            <FlatList
-              data={clothes}
+            <SectionList
+              sections={clothes}
               keyExtractor={(item) => item.id.toString()}
-              numColumns={2}
-              renderItem={({ item }) => {
-                const sprites = CLOTHES_IMAGES[item.slug];
-                const image = sprites?.[0];
+              renderItem={() => null}
+              renderSectionHeader={({ section }) => (
+                <View style={styles.sectionContainer}>
+                  <Text style={styles.sectionTitle}>
+                    {section.title}
+                  </Text>
 
-                return (
-                  <TouchableOpacity
-                    style={styles.card}
-                    onPress={() => console.log(item)}
-                  >
-                    <Image source={image} style={styles.image} />
-                    <Text style={styles.name}>{item.name}.</Text>
-                    <Text style={styles.effect}>+{item.temperature} temperatura.</Text>
-                  </TouchableOpacity>
-                );
-              }}
+                  <FlatList
+                    data={section.data}
+                    keyExtractor={(item) => item.id.toString()}
+                    numColumns={2}
+                    scrollEnabled={false} // 👈 MUITO IMPORTANTE
+                    renderItem={({ item }) => {
+                      const image = CLOTHES_IMAGES[item.slug];
+
+                      return (
+                        <TouchableOpacity
+                          style={styles.card}
+                          onPress={() => onSelectClothes(item, section.title)}
+                        >
+                          <Image source={image} style={styles.image} />
+                          <Text style={styles.name}>{item.name}</Text>
+                          <Text style={styles.effect}>
+                            +{item.temperature} temperatura
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    }}
+                  />
+                </View>
+              )}
             />
           )}
+
 
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
             <Text style={styles.closeText}>Fechar</Text>
@@ -98,9 +124,32 @@ const styles = StyleSheet.create({
     maxHeight: "80%",
   },
 
+  sectionContainer: {
+    marginBottom: 24,
+  },
+
+  sectionTitle: {
+    width: '100%', // quebra linha antes da seção
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginVertical: 12,
+    marginLeft: 8,
+    color: "#fff",
+  },
+
   title: {
     color: "#fff",
     fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 20,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+
+  subTitle: {
+    color: "#fff",
+    fontSize: 18,
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 20,
@@ -108,18 +157,20 @@ const styles = StyleSheet.create({
 
   card: {
     flex: 1,
-    margin: 8,
+    margin: 6,
     backgroundColor: "#2a2a2a",
     borderRadius: 16,
     padding: 12,
-    alignItems: 'baseline',
-    justifyContent: 'flex-end'
+    alignItems: 'center',
+    justifyContent: 'center'
   },
 
   image: {
     width: 90,
     height: 90,
-    resizeMode: "contain",
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    resizeMode: 'center'
   },
 
   name: {

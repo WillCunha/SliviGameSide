@@ -15,11 +15,15 @@ type States = {
     FUN: number;
 };
 
+type Emotion = {
+    Emotion: any;
+}
 
 type Props = {
     visible: boolean;
     onClose: () => void;
     states: States;
+    emotion: Emotion;
 };
 
 const CONFIG = {
@@ -27,19 +31,21 @@ const CONFIG = {
     ENERGY: { label: 'Energia', icon: 'flash' },
     SLEEP: { label: 'Sono', icon: 'moon' },
     TEMPERATURE: { label: 'Temperatura', icon: 'thermometer' },
-    FUN: { label: 'Diversão', icon: 'happy' }, // 👈 AQUI
-    BRAVO: { label: 'Bravo', icon: 'sad' }, // 👈 AQUI
+    FUN: { label: 'Diversão', icon: 'happy' },
+    BRAVO: { label: 'Bravo', icon: 'sad' },
 };
 
 
 
-export default function StatesModal({ visible, onClose, states }: Props) {
+export default function StatesModal({ visible, onClose, states, emotion }: Props) {
     return (
         <Modal visible={visible} transparent animationType="slide">
             <View style={styles.overlay}>
                 <View style={styles.container}>
-                    <Text style={styles.title}>Status:</Text>
-
+                    <View style={styles.header}>
+                        <Text style={styles.title}>Condição</Text>
+                        <Text style={styles.subtitle}>Emoção Atual: {emotion}</Text>
+                    </View>
                     {Object.entries(states).map(([key, value]) => {
                         const cfg = CONFIG[key as keyof States];
 
@@ -78,14 +84,32 @@ const styles = StyleSheet.create({
         padding: 20,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
-        maxHeight: "80%",
+        maxHeight: "85%",
+    },
+    header: {
+        display: 'flex',
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '5%',
+        width: '100%',
     },
     title: {
         fontSize: 20,
         color: "#fff",
         fontWeight: 'bold',
         marginBottom: 20,
-        textAlign: 'center',
+        textAlign: 'left',
+        textTransform: 'uppercase',
+        letterSpacing: 1.5,
+    },
+    subtitle: {
+        fontSize: 14,
+        color: "#fff",
+        fontWeight: 'bold',
+        marginBottom: 20,
+        textAlign: 'right',
+        textTransform: 'capitalize'
     },
     item: {
         marginBottom: 14,

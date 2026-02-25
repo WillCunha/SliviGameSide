@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import {
-    ActivityIndicator,
-    FlatList,
-    Image,
-    Modal,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  FlatList,
+  Image,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 import { fetchFoods } from "@/src/services/foodService";
@@ -46,7 +46,8 @@ export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
       <View style={styles.overlay}>
         <View style={styles.container}>
 
-          <Text style={styles.title}>Escolha um alimento</Text>
+          <Text style={styles.title}>GELADEIRA</Text>
+          <Text style={styles.subTitle}>Selecione um alimento:</Text>
 
           {loading ? (
             <ActivityIndicator size="large" />
@@ -101,6 +102,16 @@ const styles = StyleSheet.create({
   title: {
     color: "#fff",
     fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 20,
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+  },
+
+  subTitle: {
+    color: "#fff",
+    fontSize: 18,
     fontWeight: "bold",
     textAlign: "center",
     marginBottom: 20,
