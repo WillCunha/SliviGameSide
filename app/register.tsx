@@ -5,22 +5,28 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Image, ImageBackground, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { login } from '../src/services/authService'; // Ajuste o caminho
+import { checkAvailability, register } from '../src/services/authService'; // <-- Importe a nova função aqui
 
-export default function LoginScreen() {
+export default function RegisterScreen() {
   const router = useRouter();
+
   const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [sliviName, setSliviName] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // Verifica se já tem token salvo assim que abre o app
+  // Novos estados para avisos visuais
+  const [emailError, setEmailError] = useState('');
+  const [usernameError, setUsernameError] = useState('');
+
+  // ... (mantenha o seu useEffect do checkToken aqui) ...
   useEffect(() => {
     async function checkToken() {
       const storedToken = await AsyncStorage.getItem('slivi_token');
       const storedUserId = await AsyncStorage.getItem('slivi_userId');
 
       if (storedToken && storedUserId) {
-        // Pula pro Loading!
         router.replace({
           pathname: '/loading',
           params: { token: storedToken, userId: storedUserId },
@@ -32,20 +38,61 @@ export default function LoginScreen() {
     checkToken();
   }, []);
 
-  async function handleLogin() {
+  // --- FUNÇÕES DE VERIFICAÇÃO ---
+  async function handleCheckEmail() {
+    if (!email) return;
+    try {
+      const exists = await checkAvailability('email', email);
+      if (exists) {
+        setEmailError('Este e-mail já está em uso.');
+      } else {
+        setEmailError(''); // Limpa o erro se estiver tudo ok
+      }
+    } catch (err) {
+      console.log('Erro ao verificar e-mail', err);
+    }
+  }
+
+  async function handleCheckUsername() {
+    if (!username) return;
+    try {
+      // Opcional: remover o '@' caso o usuário tenha digitado para validar certinho
+      const cleanUsername = username.replace('@', '');
+      const exists = await checkAvailability('username', cleanUsername);
+      if (exists) {
+        setUsernameError('Este "@" já está em uso.');
+      } else {
+        setUsernameError('');
+      }
+    } catch (err) {
+      console.log('Erro ao verificar username', err);
+    }
+  }
+
+  async function handleRegister() {
+    // Evita cadastro se houver erros nos campos
+    if (emailError || usernameError) {
+      Alert.alert('Aviso', 'Por favor, corrija os erros antes de continuar.');
+      return;
+    }
+
+    if (!email || !username || !sliviName || !password) {
+      Alert.alert('Aviso', 'Preencha todos os campos!');
+      return;
+    }
+
     try {
       setLoading(true);
-
-      // O nosso novo authService já salva no AsyncStorage e devolve o userId
-      const { token, userId } = await login(email, password);
+      const cleanUsername = username.replace('@', '');
+      const { token, userId } = await register(email, password, cleanUsername, sliviName);
 
       router.replace({
         pathname: '/loading',
-        params: { token, userId },
+        params: { token, userId, isNewUser: 'true' },
       });
 
     } catch (err: any) {
-      Alert.alert('Erro', err.message);
+      Alert.alert('Erro no Cadastro', err.message);
       setLoading(false);
     }
   }
@@ -53,7 +100,7 @@ export default function LoginScreen() {
   if (loading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#CD56FD" />
       </View>
     );
   }
@@ -67,7 +114,6 @@ export default function LoginScreen() {
       <View style={styles.root}>
         <StatusBar style="dark" />
 
-        {/* TOPO / LOGO */}
         <View style={styles.topArea}>
           <Image
             source={require('@/assets/images/header_logo.png')}
@@ -76,25 +122,53 @@ export default function LoginScreen() {
           />
         </View>
 
-        {/* ÁREA DE LOGIN */}
         <View style={styles.loginArea}>
           <View style={styles.headerLoginArea}>
-            <Text style={styles.txtLoginArea}>Conta WF</Text>
+            <Text style={styles.txtLoginArea}>Criar Conta</Text>
             <Image
               source={require('@/assets/images/logo300v1.png')}
               style={styles.logoWf}
               resizeMode='center'
             />
           </View>
+
           <TextInput
             placeholder="Email"
             placeholderTextColor="#999"
             autoCapitalize="none"
+            keyboardType="email-address"
             value={email}
-            onChangeText={setEmail}
+            onChangeText={(text) => {
+              setEmail(text);
+              setEmailError(''); // Limpa o erro enquanto o usuário edita
+            }}
+            onBlur={handleCheckEmail} // Dispara a checagem ao sair do campo
+            style={[styles.inputLogins, emailError ? { borderBottomColor: 'red' } : null]}
+          />
+          {/* Exibe o texto de erro logo abaixo do input */}
+          {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
+
+          <TextInput
+            placeholder="Nome de Usuário (@)"
+            placeholderTextColor="#999"
+            autoCapitalize="none"
+            value={username}
+            onChangeText={(text) => {
+              setUsername(text);
+              setUsernameError('');
+            }}
+            onBlur={handleCheckUsername}
+            style={[styles.inputLogins, usernameError ? { borderBottomColor: 'red' } : null]}
+          />
+          {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
+
+          <TextInput
+            placeholder="Nome do seu Slivi"
+            placeholderTextColor="#999"
+            value={sliviName}
+            onChangeText={setSliviName}
             style={styles.inputLogins}
           />
-
           <TextInput
             placeholder="Senha"
             placeholderTextColor="#999"
@@ -103,8 +177,9 @@ export default function LoginScreen() {
             onChangeText={setPassword}
             style={styles.inputLogins}
           />
+
           <TouchableOpacity
-            onPress={handleLogin}
+            onPress={handleRegister}
             disabled={loading}
             activeOpacity={0.8}
             style={{ marginTop: '7%', marginBottom: '7%' }}
@@ -116,7 +191,7 @@ export default function LoginScreen() {
               style={styles.gradientBtn}
             >
               <Text style={styles.gradientBtnTxt}>
-                {loading ? 'Entrando...' : 'Entrar'}
+                {loading ? 'Criando...' : 'Continuar'}
               </Text>
 
               {!loading && (
@@ -129,14 +204,19 @@ export default function LoginScreen() {
               )}
             </LinearGradient>
           </TouchableOpacity>
-          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', textAlign: 'center' }}>Não tem uma conta da WF ainda? <Text style={{ color: '#CD56FD', fontSize: 12, fontWeight: '800', textAlign: 'center' }} onPress={() => {
-            router.push('/register')
-          }}>Crie agora!</Text></Text>
+
+          <TouchableOpacity onPress={() => router.push('./login')} activeOpacity={0.7}>
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', textAlign: 'center' }}>
+              Já tem uma conta WF? <Text style={{ color: '#CD56FD', fontSize: 12, fontWeight: '800', textAlign: 'center' }}>Faça o login!</Text>
+            </Text>
+          </TouchableOpacity>
+
         </View>
       </View>
     </ImageBackground>
   );
 }
+
 
 const styles = StyleSheet.create({
   background: {
@@ -217,6 +297,14 @@ const styles = StyleSheet.create({
 
   inputBtnDisabled: {
     opacity: 0.7,
+  },
+
+  errorText: {
+    color: 'red',
+    fontSize: 12,
+    marginTop: -12,
+    marginBottom: 10,
+    fontWeight: 'bold',
   },
 
   gradientBtn: {

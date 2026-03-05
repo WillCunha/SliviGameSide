@@ -15,15 +15,21 @@ type States = {
     FUN: number;
 };
 
-type Emotion = {
-    Emotion: any;
-}
-
 type Props = {
     visible: boolean;
     onClose: () => void;
     states: States;
-    emotion: Emotion;
+    emotion: string;
+};
+
+const EMOTION_EMOJIS: Record<string, string> = {
+    ASSUSTADO: '😱',
+    BRAVO: '😡',
+    NERVOSO: '😬',
+    CANSADO: '😫',
+    TRISTE: '😢',
+    NEUTRO: '😐',
+    FELIZ: '😄',
 };
 
 const CONFIG = {
@@ -36,15 +42,17 @@ const CONFIG = {
 };
 
 
-
 export default function StatesModal({ visible, onClose, states, emotion }: Props) {
+
+    const currentEmoji = EMOTION_EMOJIS[emotion?.toUpperCase()] || '';
+
     return (
         <Modal visible={visible} transparent animationType="slide">
             <View style={styles.overlay}>
                 <View style={styles.container}>
                     <View style={styles.header}>
                         <Text style={styles.title}>Condição</Text>
-                        <Text style={styles.subtitle}>Emoção Atual: {emotion}</Text>
+                        <Text style={styles.subtitle}>Emoção Atual: {emotion} {currentEmoji}</Text>
                     </View>
                     {Object.entries(states).map(([key, value]) => {
                         const cfg = CONFIG[key as keyof States];

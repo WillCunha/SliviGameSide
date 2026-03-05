@@ -49,6 +49,51 @@ export async function login(email: string, password: string) {
 
 }
 
+export async function checkAvailability(field: 'email' | 'username', value: string): Promise<boolean> {
+  const response = await fetch(`${API_URL}/auth/check-availability`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ field, value }),
+  });
+
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error);
+  }
+
+  // Retorna true se existir, false se estiver livre
+  return data.data.exists;
+}
+
+export async function register(email: string, password: string, username: string, slivi_name: string) {
+  const response = await fetch(`${API_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, username, slivi_name }),
+  });
+
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(data.error);
+  }
+
+  // O token vem dentro de data.data.token
+  const token = data.data.token;
+
+  // Decodifica o token para pegar o ID do usuário (reaproveitando sua função decodeJWT)
+  const decoded = decodeJWT(token);
+  const userId = decoded?.sub || 1;
+
+  // Salvamos ambos no AsyncStorage
+  await AsyncStorage.setItem('slivi_token', token);
+  await AsyncStorage.setItem('slivi_userId', String(userId));
+
+  // Retornamos o token e o userId
+  return { token, userId };
+}
+
 export async function updateDeviceToken(jwtToken: string, deviceToken: string) {
   const response = await fetch(`${API_URL}/auth/device-token`, {
     method: 'POST',
@@ -60,6 +105,7 @@ export async function updateDeviceToken(jwtToken: string, deviceToken: string) {
   });
 
   const data = await response.json();
+
 
   if (!data.success) {
     throw new Error(data.error);

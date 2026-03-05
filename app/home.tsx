@@ -24,12 +24,12 @@ import StatesModal from '@/components/Modal/States';
 import { syncUserLocation, WeatherState } from '@/src/api/weatherClient';
 import { CLOTHES_IMAGES } from '@/src/components/clothes/clothesMap';
 import { FOOD_IMAGES } from '@/src/components/foods/foodMap';
+import { LOCAL_ASSETS } from '@/src/components/slivi/speechMap';
 import { dressService } from '@/src/services/dressService';
 import { feedSlivi } from '@/src/services/feedService';
 import { fetchNotifications, SliviNotification } from '@/src/services/notificationService';
 import { sleepSlivi, wakeSlivi } from '@/src/services/sleepServices';
 import { fetchSliviState } from '@/src/services/sliviService';
-import { generateSpeech } from '@/src/services/speechService';
 import { Emotion } from '@/src/types/emotions';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -56,6 +56,7 @@ export default function HomeScreen() {
 
   const token = typeof params.token === 'string' ? params.token : undefined;
   const userId = typeof params.userId === 'string' ? Number(params.userId) : undefined;
+  const isNewUser = params.isNewUser === 'true';
 
   // --- ESTADOS DO JOGO ---
   const [emotion, setEmotion] = useState<Emotion>('NEUTRO');
@@ -104,6 +105,9 @@ export default function HomeScreen() {
   const speechIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const speechTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // --- MENU BOTÃO DE GAMES ---
+  const [menuOpen, setMenuOpen] = useState(false)
+
   // Limpa o som da memória quando desmontar
   useEffect(() => {
     return sound ? () => { sound.unloadAsync(); } : undefined;
@@ -132,6 +136,16 @@ export default function HomeScreen() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!loading && isNewUser) {
+      const welcomeTimer = setTimeout(() => {
+        handleWelcomeSpeech();
+      }, 1500);
+
+      return () => clearTimeout(welcomeTimer);
+    }
+  }, [loading, isNewUser]);
 
   async function loadGameData() {
     setLoading(true);
@@ -181,12 +195,14 @@ export default function HomeScreen() {
     }
 
     // ⏱️ intervalo aleatório (ex: 25s a 70s)
-    const min = 25000;
-    const max = 70000;
+    const min = 55000;
+    const max = 700000;
     const randomDelay = Math.floor(Math.random() * (max - min)) + min;
 
     speechTimeoutRef.current = setTimeout(() => {
-      // handleSliviSpeech();
+      if (!isLightOn) {
+        handleSliviSpeech();
+      }
     }, randomDelay);
   }
 
@@ -204,25 +220,27 @@ export default function HomeScreen() {
     setMouthOverride(null);
   };
 
-  async function handleSliviSpeech(textToSpeak: string = "Olá, estou aqui para te ajudar!") {
-    if (isSpeaking) return; // 
+  // ... 
+  async function handleWelcomeSpeech() {
+    if (isSpeaking) return;
 
     try {
-      const response = await generateSpeech(textToSpeak);
-      const { phrase, audio_url } = response;
+      // Aqui você define o texto que quer exibir no balão
+      const welcomeText = "Oi… que bom que você chegou — obrigado por vir fazer companhia pra mim! Vamos começar uma jornada juntos?";
+      setSpeechText(welcomeText);
 
-      const fullAudioUrl = `https://wfsoft.com.br/wf-api/slivi-game/${audio_url}`;
-
-      setSpeechText(phrase);
+      // AQUI VOCÊ IMPORTA O SEU NOVO ÁUDIO. 
+      // Lembre-se de colocar o arquivo .mp3 na pasta correta e ajustar o caminho.
+      const welcomeAudio = require('@/assets/audios/boasVindas/audio_01.mp3');
 
       const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: fullAudioUrl },
+        welcomeAudio,
         { shouldPlay: true },
         (status: any) => {
           if (status.isLoaded && status.didJustFinish) {
             setIsSpeaking(false);
             stopTalkingAnimation();
-            scheduleNextSpeech()
+            scheduleNextSpeech(); // Quando ele terminar de dar as boas vindas, agenda as falas normais
           }
         }
       );
@@ -232,13 +250,57 @@ export default function HomeScreen() {
       startTalkingAnimation();
 
     } catch (error) {
-      console.error("Erro na fala:", error);
+      console.error("Erro na fala de boas vindas:", error);
       setIsSpeaking(false);
       stopTalkingAnimation();
-      Alert.alert("Ops!", "Não foi possível gerar a fala agora.");
     }
   }
 
+  async function handleSliviSpeech() {
+    if (isSpeaking) return;
+
+    try {
+      // 1. Decidir categoria (Se fome estiver baixa, prioriza fome, senão piada)
+      // Exemplo: se fome < 30, categoria = 'fome', senão sorteia.
+      const categorias = ['piadas', 'fome'];
+      const categoriaSorteada = sliviStates && sliviStates.HUNGER < 30
+        ? 'fome'
+        : categorias[Math.floor(Math.random() * categorias.length)];
+
+      // 2. Sortear um índice de 0 a 9 (para os 10 áudios)
+      const randomIndex = Math.floor(Math.random() * 10);
+
+      // 3. Pegar os dados locais
+      const selectedAudio = LOCAL_ASSETS[categoriaSorteada].audios[randomIndex];
+      const selectedText = LOCAL_ASSETS[categoriaSorteada].textos[randomIndex];
+
+      if (!selectedAudio || !selectedText) return;
+
+      setSpeechText(selectedText);
+
+      // 4. Executar o áudio (Note que agora passamos o require direto, não o {uri})
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        selectedAudio,
+        { shouldPlay: true },
+        (status: any) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setIsSpeaking(false);
+            stopTalkingAnimation();
+            scheduleNextSpeech();
+          }
+        }
+      );
+
+      setSound(newSound);
+      setIsSpeaking(true);
+      startTalkingAnimation();
+
+    } catch (error) {
+      console.error("Erro na fala local:", error);
+      setIsSpeaking(false);
+      stopTalkingAnimation();
+    }
+  }
 
   // --- LÓGICA DA LÂMPADA ---
   const toggleLight = async () => {
@@ -365,6 +427,8 @@ export default function HomeScreen() {
     } catch (error) { console.log("Erro ao checar notificações:", error); }
   };
 
+
+
   const currentBgImage = WEATHER_IMAGES[weather.condition] || WEATHER_IMAGES.sun;
 
   // Pega os caminhos (ex: "/pants/...") do estado sliviClothing 
@@ -405,7 +469,7 @@ export default function HomeScreen() {
 
           {/* Sair/Engrenagem */}
           <TouchableOpacity onPress={handleLogout} style={styles.iconButton}>
-            <Ionicons name="settings-sharp" size={26} color="#000" />
+            <Ionicons name="exit" size={26} color="#000" />
           </TouchableOpacity>
         </View>
       </View>
@@ -475,21 +539,53 @@ export default function HomeScreen() {
           <MaterialCommunityIcons name="hanger" size={32} color="#000" />
         </TouchableOpacity>
 
-        {/* Botão Jogar (CTA Principal) */}
-        <TouchableOpacity
-          style={styles.bottomNavIcon}
-          onPress={() => {
-            if (isLightOn) {
-              router.push({
-                pathname: './games/SliviPulse',
-                params: { emotion: emotion }
-              })
-            }
-          }
-          }
-        >
-          <Ionicons name="game-controller-sharp" size={32} color="#000" />
-        </TouchableOpacity>
+        <View style={{ alignItems: 'center' }}>
+
+          {/* MENU DROPDOWN (abre pra cima) */}
+          {menuOpen && (
+            <View style={styles.dropdownMenu}>
+              <TouchableOpacity style={styles.dropdownItem}
+                onPress={() => {
+                  router.push({
+                    pathname: './games/SliviPulse',
+                    params: { emotion: emotion }
+                  })
+                }}>
+                <Text style={{ textAlign: 'center', color: '#000', fontWeight: '800' }}>Slivi Pulse</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.dropdownItem}
+                onPress={() => {
+                  router.push({
+                    pathname: './games/SliviMaestro',
+                    params: { emotion: emotion }
+                  })
+                }}>
+                <Text style={{ textAlign: 'center', color: '#000', fontWeight: '800' }}>Slivi River</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.dropdownItem}
+                onPress={() => {
+                  router.push({
+                    pathname: './games/GameQuiz/GameMenuScreen',
+                    params: { emotion: emotion }
+                  })
+                }}>
+                <Text style={{ textAlign: 'center', color: '#000', fontWeight: '800' }}>Slivi Quiz</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* BOTÃO PRINCIPAL */}
+          <TouchableOpacity
+            style={styles.bottomNavIcon}
+            onPress={() => { if (isLightOn) { setMenuOpen(prev => !prev) } }}
+          >
+            <Ionicons name="game-controller-sharp" size={32} color="#000" />
+          </TouchableOpacity>
+
+        </View>
+
 
         {/* Botão Chat (Teste de Fala) */}
         <TouchableOpacity onPress={() => {
@@ -505,7 +601,7 @@ export default function HomeScreen() {
 
       <FoodModal visible={foodModalVisible} onClose={() => setFoodModalVisible(false)} onSelectFood={(food) => startEatingAnimation(food)} />
       <ClothesModal visible={clothesModalVisible} onClose={() => setClothesModalVisible(false)} onSelectClothes={handleSelectClothing} />
-      {sliviStates && <StatesModal visible={statesModalVisible} onClose={() => setStatesModalVisible(false)} states={sliviStates} emotion={emotion}/>}
+      {sliviStates && <StatesModal visible={statesModalVisible} onClose={() => setStatesModalVisible(false)} states={sliviStates} emotion={emotion} />}
       <Notification visible={notifModalVisible} onClose={() => setNotifModalVisible(false)} notifications={notifications} loading={loadingNotifs} />
     </View >
   );
@@ -625,7 +721,7 @@ const styles = StyleSheet.create({
   },
 
   // --- FOOD STYLES ---
-  foodTouch: { position: 'absolute', right: 100, zIndex: 20, bottom: 140, backgroundColor: 'transparent' },
+  foodTouch: { position: 'absolute', right: 100, zIndex: 20, bottom: 110, backgroundColor: 'transparent' },
   foodImg: { width: 140, height: 140, zIndex: 20 },
 
   // --- BOTTOM NAV BAR STYLES ---
@@ -634,7 +730,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     alignItems: 'center',
-    marginBottom: 40, // Distância do fundo da tela
+    marginBottom: 40,
     zIndex: 10,
   },
   bottomNavIcon: {
@@ -647,6 +743,25 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     marginHorizontal: 5,
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    bottom: 80, // 🔥 altura do botão (70) + margem
+    alignItems: 'center',
+    gap: 5,
+  },
+
+  dropdownItem: {
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#000',
+    borderRadius: 15,
+    padding: 15,
+    width: 70,
+    height: 70,
+    textAlign: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   playButton: {
     flex: 1,

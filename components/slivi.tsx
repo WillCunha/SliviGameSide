@@ -76,7 +76,7 @@ export default function Slivi({
         {/* 4. BOCA */}
         <View style={[styles.mouthWrap,
         {
-          top: mouthTopOffset + (5 * ratio),
+          top: mouthTopOffset + (2 * ratio),
           left: (bodySize - mouthWidth) / 2,
           zIndex: 10, // Garante que a boca fique por cima de roupas
         },

@@ -12,7 +12,7 @@ const params = useLocalSearchParams();
 
 export default function LoadingScreen() {
     const router = useRouter();
-    const { token, userId } = useLocalSearchParams();
+    const { token, userId, isNewUser } = useLocalSearchParams();
 
     const [error, setError] = useState("");
 
@@ -68,7 +68,6 @@ export default function LoadingScreen() {
                 // 1. Tenta pegar o device token e enviar pra API
                 const deviceToken = await registerForPushNotificationsAsync();
                 if (deviceToken) {
-                    // Atualiza silenciosamente na API
                     await updateDeviceToken(token as string, deviceToken).catch(console.error);
                 }
 
@@ -82,14 +81,17 @@ export default function LoadingScreen() {
                 const stateString = JSON.stringify(sliviState);
                 const weatherString = JSON.stringify(weatherData);
 
+                console.log(stateString);
+
                 // 4. Tudo pronto! Envia para a Home com os dados já carregados
                 router.replace({
-                    pathname: '/home',
+                    pathname: './home',
                     params: {
                         token,
                         userId,
                         initialSliviState: stateString,
-                        initialWeather: weatherString
+                        initialWeather: weatherString,
+                        isNewUser
                     },
                 });
 
