@@ -1,5 +1,6 @@
 import { getObjectives, sendGameScore } from '@/src/services/gameService';
 import { Emotion } from '@/src/types/emotions';
+import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
     Dimensions,
@@ -164,6 +165,8 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
                     finalEmotionValue: internalEmotionValue,
                     finalEmotionState: currentEmotion,
                     stats: {
+                        matches_played: 1,                 // <--- NOVO: Pro selo acumulativo de partidas
+                        total_navigation_time: duration,   // <--- NOVO: Pro selo de tempo total no rio
                         score: score,
                         ...stats,
                         run_duration: duration,
@@ -438,44 +441,41 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
     };
 
 
-    function endGame() {
+    // const router = useRouter();
+
+    async function endGame() {
         setGameOver(true);
         setStarted(false);
-
-           const duration =
-                    startTime.current
-                        ? Math.floor((Date.now() - startTime.current) / 1000)
-                        : 0;
-
-
-                const payload = {
-                    game: 'maestro',
-                    score,
-                    duration,
-                    finalEmotionValue: internalEmotionValue,
-                    finalEmotionState: currentEmotion,
-                    stats: {
-                        score: score,
-                        ...stats,
-                        run_duration: duration,
-                    },
-                }
-
-                sendGameScore({
-                    game: 'maestro',
-                    score,
-                    duration,
-                    finalEmotionValue: internalEmotionValue,
-                    finalEmotionState: currentEmotion,
-                    stats: {
-                        score: score,
-                        ...stats,
-                        run_duration: duration,
-                    },
-                });
-
-
         Vibration.cancel();
+
+        const duration = startTime.current
+            ? Math.floor((Date.now() - startTime.current) / 1000)
+            : 0;
+
+        try {
+            const response = await sendGameScore({
+                game: 'maestro',
+                score,
+                duration,
+                finalEmotionValue: internalEmotionValue,
+                finalEmotionState: currentEmotion,
+                stats: {
+                    matches_played: 1,
+                    total_navigation_time: duration,
+                    score: score,
+                    ...stats,
+                    run_duration: duration,
+                },
+            });
+
+            // 🎉 COMEMORAÇÃO!
+            if (response?.unlocked_seals && response.unlocked_seals.length > 0) {
+                router.push({ pathname: './SealUnlocked', params: { seals: JSON.stringify(response.unlocked_seals) }});
+                
+            }
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     useEffect(() => {

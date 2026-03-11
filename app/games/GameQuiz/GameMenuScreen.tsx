@@ -11,7 +11,7 @@ export default function GameMenuScreen() {
 
   // 1. Criar Sala Privada
   const handleCreatePrivate = async () => {
-    const userId = await AsyncStorage.getItem("userId");
+    const userId = await AsyncStorage.getItem("slivi_userId");
     const token = await AsyncStorage.getItem("slivi_token");
 
     setLoading(true);
@@ -39,7 +39,7 @@ export default function GameMenuScreen() {
 
   // 2. Entrar em Sala Privada
   const handleJoinPrivate = async () => {
-    const userId = await AsyncStorage.getItem("userId");
+    const userId = await AsyncStorage.getItem("slivi_userId");
     const token = await AsyncStorage.getItem("slivi_token");
     setLoading(true);
     const res = await fetch('https://api.wfsoft.com.br/slivi-game/api/slivi/game/quiz/join', {
@@ -68,7 +68,7 @@ export default function GameMenuScreen() {
 
   // 3. Procurar Partida (Matchmaking)
   const handleMatchmake = async () => {
-    const userId = await AsyncStorage.getItem("userId");
+    const userId = await AsyncStorage.getItem("slivi_userId");
     const token = await AsyncStorage.getItem("slivi_token");
     setLoading(true);
     const res = await fetch('https://api.wfsoft.com.br/slivi-game/api/slivi/game/quiz/matchmake', {
@@ -79,6 +79,7 @@ export default function GameMenuScreen() {
       },
     });
     const data = await res.json();
+    console.log(data);
     setLoading(false);
 
     if (data.data.status === 'playing') {

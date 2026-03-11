@@ -1,6 +1,7 @@
 import { getObjectives, sendGameScore } from '@/src/services/gameService';
 import { Emotion } from '@/src/types/emotions';
 import * as Haptics from 'expo-haptics';
+import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
   Animated,
@@ -110,6 +111,8 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
   // Stats
   const [score, setScore] = useState(0);
   const [combo, setCombo] = useState(0);
+  const [maxCombo, setMaxCombo] = useState(0);
+  const [jumps, setJumps] = useState(0);
   const [mistakes, setMistakes] = useState(0);
   const [speed, setSpeed] = useState(4);
   const [difficultyLevel, setDifficultyLevel] = useState(0);
@@ -314,6 +317,12 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
     } else {
       setTotalBoxes(v => v + 1);
 
+      setCombo(c => {
+        const newCombo = c + 1;
+        setMaxCombo(m => Math.max(m, newCombo));
+        return newCombo;
+      });
+
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setCombo(c => c + 1); // Em Fever, o combo aumenta só para score, mas o tempo decide o fim
 
@@ -355,7 +364,7 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
     }
   };
 
-  function handleGameOver() {
+  async function handleGameOver() {
     if (gameOver) return;
     setGameOver(true);
     triggerShake();
@@ -363,25 +372,34 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
     if (startTime.current) {
       const duration = Math.round((Date.now() - startTime.current) / 1000);
 
-      sendGameScore({
-        game: 'pulse',
-        score,
-        duration,
-        finalEmotionValue: moodValue,
-        finalEmotionState: currentEmotion,
+      try {
+        // Precisamos que sendGameScore seja 'await' e retorne os dados do PHP
+        const response = await sendGameScore({
+          game: 'pulse',
+          score,
+          duration,
+          finalEmotionValue: moodValue,
+          finalEmotionState: currentEmotion,
+          stats: {
+            "total_jumps": 500,
+            "max_combo": 150,
+            "total_boxes": 120,
+            "errors": 0,
+            "perfect_run": true,
+            "used_magnet": false,
+            "run_duration": 180
+          }
+        });
 
-        stats: {
-          total_boxes: totalBoxes,
-          bonus_boxes: bonusBoxes,
-          magnetic_boxes: magneticBoxes,
-          ghost_boxes: ghostBoxes,
-          score: score,
-          used_magnet: usedMagnetInRun.current,
-          during_fever: usedFeverInRun.current,
-
-          run_duration: duration
+        // VERIFICA SE GANHOU SELOS! 🎊
+        if (response?.unlocked_seals && response.unlocked_seals.length > 0) {
+          // Redireciona passando os selos via parâmetros
+          router.push({ pathname: './SealUnlocked', params: { seals: JSON.stringify(response.unlocked_seals) } });
+          console.log("SELO DESBLOQUEADO!", response.unlocked_seals);
         }
-      });
+      } catch (err) {
+        console.error("Erro ao enviar score", err);
+      }
     }
   }
 
@@ -501,6 +519,7 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
         if (gameOver) return;
         if (!started) { setStarted(true); startTime.current = Date.now(); }
         pressing.current = true;
+        setJumps(j => j + 1);
       }}
       onPressOut={() => pressing.current = false}
       onPress={gameOver ? restart : undefined}

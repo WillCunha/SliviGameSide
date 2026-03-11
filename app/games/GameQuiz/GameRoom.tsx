@@ -8,39 +8,39 @@ import { useGameRoom } from './useGameRoom';
 export default function GameScreen() {
   const { roomId, userId, questions: questionsParam } = useLocalSearchParams();
 
-  // Como o expo-router passa tudo como string na URL, precisamos converter as perguntas de volta para array
   const questions = typeof questionsParam === 'string' ? JSON.parse(questionsParam) : [];
-  
-  // Console de debug pra você ver o que de fato está chegando
-  console.log("Valores na URL:", { userId, roomId });
 
-  // 1. Forçando a conversão para string real
   const roomIdStr = String(roomId);
   const userIdStr = String(userId);
 
   const { roomData, playCard, resolveAnswer, drawCard } = useGameRoom(roomIdStr, userIdStr);
 
-  // 2. Garantindo que a comparação de ID do oponente seja feita como string
-  const opponentId = roomData 
-    ? Object.keys(roomData.players).find(id => String(id) !== userIdStr) 
+  const opponentId = roomData
+    ? Object.keys(roomData.players).find(id => String(id) !== userIdStr)
     : null;
-    
-  // 3. Forçando a conversão do turno atual para comparar corretamente
+
   const isMyTurn = String(roomData?.current_turn) === userIdStr;
 
   const activeQuestionId = roomData?.table?.active_question;
   const waitingAnswerFrom = roomData?.table?.waiting_answer_from;
 
   const myHandIds = roomData?.players[userIdStr]?.hand || [];
-  
-  // 4. Convertendo os arrays para Number antes da comparação
-  const myHand = questions.filter((q: any) => 
+
+  const myHand = questions.filter((q: any) =>
     myHandIds.map(Number).includes(Number(q.id))
   );
 
   const fullActiveQuestion = activeQuestionId
     ? questions.find((q: any) => Number(q.id) === Number(activeQuestionId))
     : null;
+
+  // --- NOVIDADE: Extraindo os nomes e pontos para o placar ---
+  const myScore = roomData?.players[userIdStr]?.score || 0;
+  const myName = roomData?.players[userIdStr]?.name || "Você";
+
+  const opponentScore = opponentId ? (roomData?.players[opponentId]?.score || 0) : 0;
+  const opponentName = opponentId ? (roomData?.players[opponentId]?.name || "Oponente") : "Oponente";
+  // -----------------------------------------------------------
 
   useEffect(() => {
     if (roomData?.status === 'finished') {
@@ -49,22 +49,26 @@ export default function GameScreen() {
         params: {
           roomId: roomIdStr,
           userId: userIdStr,
-          score: roomData.players[userIdStr]?.score || 0,
-          // Removida a exclamação perigosa (opponentId!) e adicionada verificação segura
-          opponentScore: opponentId ? (roomData.players[opponentId]?.score || 0) : 0
+          score: myScore,
+          opponentScore: opponentScore
         }
       });
     }
-  }, [roomData?.status, opponentId, roomIdStr, userIdStr]);
+  }, [roomData?.status, opponentId, roomIdStr, userIdStr, myScore, opponentScore]);
 
   if (!roomData) return null;
 
   return (
     <View style={styles.container}>
+
       {/* MÃO DO OPONENTE */}
       <View style={styles.opponentArea}>
+        {/* PLACAR DO OPONENTE */}
+        <View style={styles.scoreBoard}>
+          <Text style={styles.scoreText}>{opponentName}: </Text> <Text style={styles.scoreText}> {opponentScore} pts</Text>
+        </View>
+
         <View style={styles.handRow}>
-          {/* Adicionada verificação segura para opponentId */}
           {Array.from({ length: opponentId ? (roomData.players[opponentId]?.hand_count || 0) : 0 }).map((_, i) => (
             <View key={i} style={{ marginLeft: i === 0 ? 0 : -30 }}>
               <Card isBack />
@@ -91,7 +95,6 @@ export default function GameScreen() {
         <View style={styles.statusContainer}>
           {activeQuestionId ? (
             <Text style={styles.statusText}>
-              {/* Forçado para string para não falhar igual ao isMyTurn */}
               {String(waitingAnswerFrom) === userIdStr ? "Sua vez de responder!" : "Aguardando oponente..."}
             </Text>
           ) : (
@@ -102,6 +105,11 @@ export default function GameScreen() {
 
       {/* MINHA MÃO */}
       <View style={styles.myArea}>
+        {/* MEU PLACAR */}
+        <View style={styles.scoreBoard}>
+          <Text style={styles.scoreText}>{myName}: </Text> <Text style={styles.scoreText}>{myScore} pts</Text>
+        </View>
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           {myHand.map((q: any) => (
             <Card
@@ -115,7 +123,6 @@ export default function GameScreen() {
       </View>
 
       {/* MODAL DE RESPOSTA */}
-      {/* Forçado para string também */}
       {fullActiveQuestion && String(waitingAnswerFrom) === userIdStr && (
         <QuizModal
           pergunta={fullActiveQuestion}
@@ -128,7 +135,7 @@ export default function GameScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#1A1A2E', padding: 20, overflow: 'hidden' },
-  opponentArea: { height: '20%', justifyContent: 'center', alignItems: 'center', maxWidth: '100%' },
+  opponentArea: { height: '25%', justifyContent: 'center', alignItems: 'center', maxWidth: '100%' },
   handRow: { flexDirection: 'row', maxWidth: '100%' },
   tableCenter: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 20 },
   deckContainer: { width: 80, height: 120, marginRight: 30, position: 'relative' },
@@ -137,5 +144,9 @@ const styles = StyleSheet.create({
   deckCount: { color: '#FFF', position: 'absolute', bottom: 5, right: 5, fontSize: 12, fontWeight: 'bold' },
   statusContainer: { flex: 1, alignItems: 'center' },
   statusText: { color: '#FFF', fontSize: 18, fontWeight: 'bold', textAlign: 'center' },
-  myArea: { height: '30%', paddingVertical: 20, backgroundColor: 'rgba(255,255,255,0.05)' }
+  myArea: { height: '35%', paddingVertical: 10, justifyContent: 'center', alignItems: 'center', },
+
+  // Novos estilos para o placar
+  scoreBoard: { marginBottom: 10, alignItems: 'center', display: 'flex', flexDirection: 'row', justifyContent: 'space-between', backgroundColor: 'rgba(0,0,0,0.3)', paddingHorizontal: 15, paddingVertical: 5, borderRadius: 10, width: '100%' },
+  scoreText: { color: '#F1C40F', fontSize: 16, fontWeight: 'bold' },
 });
