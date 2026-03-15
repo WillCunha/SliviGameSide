@@ -31,6 +31,7 @@ export default function GameMenuScreen() {
       pathname: './WaitingRoomScreen',
       params: {
         roomId: data.data.roomId,
+        token,
         userId,
         questions: JSON.stringify(data.data.questions)
       }
@@ -57,6 +58,7 @@ export default function GameMenuScreen() {
         pathname: './GameRoom', // Assumindo que o nome do arquivo seja GameRoom.tsx
         params: {
           roomId: data.data.roomId,
+          token,
           userId,
           questions: JSON.stringify(data.data.questions)
         }
@@ -87,6 +89,7 @@ export default function GameMenuScreen() {
         pathname: './GameRoom',
         params: {
           roomId: data.data.roomId,
+          token,
           userId,
           questions: JSON.stringify(data.data.questions)
         }
@@ -96,6 +99,7 @@ export default function GameMenuScreen() {
         pathname: './WaitingRoomScreen',
         params: {
           roomId: data.data.roomId,
+          token,
           userId,
           questions: JSON.stringify(data.data.questions)
         }
@@ -176,7 +180,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.5,
     textAlign: 'left',
-   },
+  },
 
   input: {
     marginTop: '5%',

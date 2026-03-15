@@ -25,7 +25,6 @@ export async function apiRequest<T>(
   });
 
   const json: ApiResponse<T> = await response.json();
-  console.log("dados da api: ", json);
 
   if (!json.success) {
     throw new Error(json.error);

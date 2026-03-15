@@ -1,4 +1,48 @@
 export const LOCAL_ASSETS = {
+    espirro: {
+        audios: [
+            require('@/assets/audios/espirro/audio_01.mp3'),
+            require('@/assets/audios/espirro/audio_02.mp3'),
+        ],
+        textos: [
+            "",
+            ""
+        ]
+    },
+    aleatorio: {
+        audios: [
+            require('@/assets/audios/aleatorio/audio_01.mp3'),
+            require('@/assets/audios/aleatorio/audio_02.mp3'),
+            require('@/assets/audios/aleatorio/audio_03.mp3'),
+            require('@/assets/audios/aleatorio/audio_04.mp3'),
+            require('@/assets/audios/aleatorio/audio_06.mp3'),
+            require('@/assets/audios/aleatorio/audio_05.mp3'),
+            require('@/assets/audios/aleatorio/audio_07.mp3'),
+            require('@/assets/audios/aleatorio/audio_08.mp3'),
+        ],
+        textos: [
+            "Hahaha, hehehe, hihihi",
+            "Hahaha! Haha! Ai 'carai', viu... 'pera', por que to rindo mesmo?",
+            "Hehe, hihi, hahaha.",
+            "Li li... la la... lu lu... Vai toma...  água cara, 'cê' vai ficar com sede!",
+            "Será que se eu correr em círculos rápido o suficiente… será que eu encontro meu passado?",
+            "Será que pizza no café da manhã conta como café… ou como pizza?",
+            "Tã tã tã, nã nã nã, nã nã nã… espera, no que eu 'tava' pensando mesmo?",
+            "Às vezes eu fico pensando… será que alguém está me olhando através de uma tela agora?",
+        ]
+    },
+    quartaParede: {
+        audios: [
+            require('@/assets/audios/quartaParede/audio_09.mp3'),
+            require('@/assets/audios/quartaParede/audio_10.mp3'),
+            require('@/assets/audios/quartaParede/audio_11.mp3'),
+        ],
+        textos: [
+            "Às vezes eu fico pensando… será que alguém está me olhando através de uma tela agora?",
+            "Nããããão! Não vem com esse dedo 'pra' cima de mim de novo não! Ah, é brincadeira, pode vir sim hahaha.",
+            "Você já parou pra pensar que do mesmo jeito que você joga comigo, pode ter algum jogando com você agora? Huuum você está pensando nisso agora, né, hahaha",
+        ]
+    },
     piadas: {
         audios: [
             require('@/assets/audios/piadas/audio_01.mp3'),
@@ -25,6 +69,28 @@ export const LOCAL_ASSETS = {
             "Qual é a cidade que não tem táxi? Uber...lândia.",
         ]
     },
+    bravo: {
+        audios: [
+            require('@/assets/audios/bravo/audio_01.mp3'),
+            require('@/assets/audios/bravo/audio_02.mp3'),
+            require('@/assets/audios/bravo/audio_03.mp3'),
+            require('@/assets/audios/bravo/audio_04.mp3'),
+            require('@/assets/audios/bravo/audio_05.mp3'),
+            require('@/assets/audios/bravo/audio_06.mp3'),
+            require('@/assets/audios/bravo/audio_07.mp3'),
+            require('@/assets/audios/bravo/audio_08.mp3'),
+        ],
+        textos: [
+            "Eu to um pouco bravo hoje.",
+            "Hoje, eu acordei com o pé esquerdo.",
+            "Não tô afim de brincadeira não.",
+            "Não olha agora, mas, você está me irritando.",
+            "Isso é um bip de aviso: estou de mau humor!",
+            "Hoje eu 'tô' é dificil, nem eu 'tô' me aguentando.",
+            "Estou bravo, mas aceito um lanchinho para compensar o estresse.",
+            "Não ria da minha braveza! É um rugido, não um espirro!",
+        ]
+    },
     fome: {
         audios: [
             require('@/assets/audios/fome/audio_01.mp3'),
@@ -48,6 +114,36 @@ export const LOCAL_ASSETS = {
             "Um podrão ia bem agora!",
             "Tem como a gente pedir uma pizza no app vizinho?",
             "Eu queria um omelete grandão, recheado... huuum!",
+        ]
+    },
+    sono: {
+        audios: [
+            require('@/assets/audios/sono/audio_01.mp3'),
+            require('@/assets/audios/sono/audio_02.mp3'),
+            require('@/assets/audios/sono/audio_03.mp3'),
+            require('@/assets/audios/sono/bocejo.mp3'),
+            // ... adicione até o 10
+        ],
+        textos: [
+            "Eu preciso dormir só mais um golinho...",
+            "Eu preciso muito dormir.",
+            "Não consigo nem raciocinar de tanto sono.",
+            "Zzzz...",
+        ]
+    },
+    aoAcordar: {
+        audios: [
+            require('@/assets/audios/aoAcordar/audio_01.mp3'),
+            require('@/assets/audios/aoAcordar/audio_02.mp3'),
+            require('@/assets/audios/aoAcordar/audio_03.mp3'),
+            require('@/assets/audios/aoAcordar/audio_04.mp3'),
+            // ... adicione até o 10
+        ],
+        textos: [
+            "Nossa, eu acho que dormi de mais hoje.",
+            "Eu dormi tanto, mas tanto, que me sinto novo em folha.",
+            "Me sinto descansado agora que dormi bastante.",
+            "Estou pronto para mais um dia!",
         ]
     }
 };

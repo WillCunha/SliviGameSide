@@ -16,7 +16,6 @@ type GamePayload = {
  */
 export async function sendGameScore(data: GamePayload) {
   const token = await AsyncStorage.getItem("slivi_token");
-  console.log(data);
 
   return apiRequest<any>("slivi/game", {
     method: "POST",

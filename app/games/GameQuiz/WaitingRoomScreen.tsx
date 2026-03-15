@@ -2,7 +2,7 @@ import { database } from '@/src/api/firebase';
 import { router, useLocalSearchParams } from 'expo-router';
 import { onValue, ref } from 'firebase/database';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 
 export default function WaitingRoomScreen() {
   // Pega os parâmetros da URL
@@ -37,6 +37,10 @@ export default function WaitingRoomScreen() {
       <Text style={styles.waitingText}>
         Aguardando oponente... ({roomData?.players ? Object.keys(roomData.players).length : 1}/2)
       </Text>
+      <View style={{position: 'absolute', bottom: 5, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%'}}>
+        <Image source={require('@/assets/images/icon_slivi.png')} style={{width: 100, height: 100}} resizeMode='contain'/>
+        <Image source={require('@/assets/images/wfLogo.png')} style={{width: 65, height: 65, marginRight: '5%'}} resizeMode='contain'/>
+      </View>
     </View>
   );
 }
