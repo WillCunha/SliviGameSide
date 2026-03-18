@@ -1,24 +1,44 @@
 export const LOCAL_ASSETS = {
     espirro: {
         audios: [
-            require('@/assets/audios/espirro/audio_01.mp3'),
-            require('@/assets/audios/espirro/audio_02.mp3'),
+            require('@/assets/audios/speechs/espirro/audio_01.mp3'),
+            require('@/assets/audios/speechs/espirro/audio_02.mp3'),
         ],
         textos: [
             "",
             ""
         ]
     },
+    fimComer: {
+        audios: [
+            require('@/assets/audios/speechs/fimComer/audio_01.mp3'),
+            require('@/assets/audios/speechs/fimComer/audio_02.mp3'),
+            require('@/assets/audios/speechs/fimComer/audio_03.mp3'),
+            require('@/assets/audios/speechs/fimComer/audio_04.mp3'),
+            require('@/assets/audios/speechs/fimComer/audio_05.mp3'),
+            require('@/assets/audios/speechs/fimComer/audio_06.mp3'),
+            require('@/assets/audios/speechs/fimComer/audio_07.mp3'),
+        ],
+        textos: [
+            "Caramba, que delicia!",
+            "Eu queria mais um pouquinho.",
+            "Só isso? Não vai tampar nem o vão do meu dente.",
+            "Por acaso, tem mais comida aí?",
+            "Huuum, tava bem suculento.",
+            "Acho que... ficou um pedaço no vão do meu dente.",
+            "Nossa, acho que comi demais.",
+        ]
+    },
     aleatorio: {
         audios: [
-            require('@/assets/audios/aleatorio/audio_01.mp3'),
-            require('@/assets/audios/aleatorio/audio_02.mp3'),
-            require('@/assets/audios/aleatorio/audio_03.mp3'),
-            require('@/assets/audios/aleatorio/audio_04.mp3'),
-            require('@/assets/audios/aleatorio/audio_06.mp3'),
-            require('@/assets/audios/aleatorio/audio_05.mp3'),
-            require('@/assets/audios/aleatorio/audio_07.mp3'),
-            require('@/assets/audios/aleatorio/audio_08.mp3'),
+            require('@/assets/audios/speechs/aleatorio/audio_01.mp3'),
+            require('@/assets/audios/speechs/aleatorio/audio_02.mp3'),
+            require('@/assets/audios/speechs/aleatorio/audio_03.mp3'),
+            require('@/assets/audios/speechs/aleatorio/audio_04.mp3'),
+            require('@/assets/audios/speechs/aleatorio/audio_06.mp3'),
+            require('@/assets/audios/speechs/aleatorio/audio_05.mp3'),
+            require('@/assets/audios/speechs/aleatorio/audio_07.mp3'),
+            require('@/assets/audios/speechs/aleatorio/audio_08.mp3'),
         ],
         textos: [
             "Hahaha, hehehe, hihihi",
@@ -33,9 +53,9 @@ export const LOCAL_ASSETS = {
     },
     quartaParede: {
         audios: [
-            require('@/assets/audios/quartaParede/audio_09.mp3'),
-            require('@/assets/audios/quartaParede/audio_10.mp3'),
-            require('@/assets/audios/quartaParede/audio_11.mp3'),
+            require('@/assets/audios/speechs/quartaParede/audio_09.mp3'),
+            require('@/assets/audios/speechs/quartaParede/audio_10.mp3'),
+            require('@/assets/audios/speechs/quartaParede/audio_11.mp3'),
         ],
         textos: [
             "Às vezes eu fico pensando… será que alguém está me olhando através de uma tela agora?",
@@ -45,16 +65,16 @@ export const LOCAL_ASSETS = {
     },
     piadas: {
         audios: [
-            require('@/assets/audios/piadas/audio_01.mp3'),
-            require('@/assets/audios/piadas/audio_02.mp3'),
-            require('@/assets/audios/piadas/audio_03.mp3'),
-            require('@/assets/audios/piadas/audio_04.mp3'),
-            require('@/assets/audios/piadas/audio_05.mp3'),
-            require('@/assets/audios/piadas/audio_06.mp3'),
-            require('@/assets/audios/piadas/audio_07.mp3'),
-            require('@/assets/audios/piadas/audio_08.mp3'),
-            require('@/assets/audios/piadas/audio_09.mp3'),
-            require('@/assets/audios/piadas/audio_10.mp3'),
+            require('@/assets/audios/speechs/piadas/audio_01.mp3'),
+            require('@/assets/audios/speechs/piadas/audio_02.mp3'),
+            require('@/assets/audios/speechs/piadas/audio_03.mp3'),
+            require('@/assets/audios/speechs/piadas/audio_04.mp3'),
+            require('@/assets/audios/speechs/piadas/audio_05.mp3'),
+            require('@/assets/audios/speechs/piadas/audio_06.mp3'),
+            require('@/assets/audios/speechs/piadas/audio_07.mp3'),
+            require('@/assets/audios/speechs/piadas/audio_08.mp3'),
+            require('@/assets/audios/speechs/piadas/audio_09.mp3'),
+            require('@/assets/audios/speechs/piadas/audio_10.mp3'),
         ],
         textos: [
             "Se você não rir dessas piadas, o problema não é o meu algoritmo, é o seu senso de humor que está precisando de um update no driver.",
@@ -71,14 +91,14 @@ export const LOCAL_ASSETS = {
     },
     bravo: {
         audios: [
-            require('@/assets/audios/bravo/audio_01.mp3'),
-            require('@/assets/audios/bravo/audio_02.mp3'),
-            require('@/assets/audios/bravo/audio_03.mp3'),
-            require('@/assets/audios/bravo/audio_04.mp3'),
-            require('@/assets/audios/bravo/audio_05.mp3'),
-            require('@/assets/audios/bravo/audio_06.mp3'),
-            require('@/assets/audios/bravo/audio_07.mp3'),
-            require('@/assets/audios/bravo/audio_08.mp3'),
+            require('@/assets/audios/speechs/bravo/audio_01.mp3'),
+            require('@/assets/audios/speechs/bravo/audio_02.mp3'),
+            require('@/assets/audios/speechs/bravo/audio_03.mp3'),
+            require('@/assets/audios/speechs/bravo/audio_04.mp3'),
+            require('@/assets/audios/speechs/bravo/audio_05.mp3'),
+            require('@/assets/audios/speechs/bravo/audio_06.mp3'),
+            require('@/assets/audios/speechs/bravo/audio_07.mp3'),
+            require('@/assets/audios/speechs/bravo/audio_08.mp3'),
         ],
         textos: [
             "Eu to um pouco bravo hoje.",
@@ -93,15 +113,15 @@ export const LOCAL_ASSETS = {
     },
     fome: {
         audios: [
-            require('@/assets/audios/fome/audio_01.mp3'),
-            require('@/assets/audios/fome/audio_02.mp3'),
-            require('@/assets/audios/fome/audio_03.mp3'),
-            require('@/assets/audios/fome/audio_04.mp3'),
-            require('@/assets/audios/fome/audio_05.mp3'),
-            require('@/assets/audios/fome/audio_06.mp3'),
-            require('@/assets/audios/fome/audio_07.mp3'),
-            require('@/assets/audios/fome/audio_08.mp3'),
-            require('@/assets/audios/fome/audio_09.mp3'),
+            require('@/assets/audios/speechs/fome/audio_01.mp3'),
+            require('@/assets/audios/speechs/fome/audio_02.mp3'),
+            require('@/assets/audios/speechs/fome/audio_03.mp3'),
+            require('@/assets/audios/speechs/fome/audio_04.mp3'),
+            require('@/assets/audios/speechs/fome/audio_05.mp3'),
+            require('@/assets/audios/speechs/fome/audio_06.mp3'),
+            require('@/assets/audios/speechs/fome/audio_07.mp3'),
+            require('@/assets/audios/speechs/fome/audio_08.mp3'),
+            require('@/assets/audios/speechs/fome/audio_09.mp3'),
             // ... adicione até o 10
         ],
         textos: [
@@ -118,10 +138,10 @@ export const LOCAL_ASSETS = {
     },
     sono: {
         audios: [
-            require('@/assets/audios/sono/audio_01.mp3'),
-            require('@/assets/audios/sono/audio_02.mp3'),
-            require('@/assets/audios/sono/audio_03.mp3'),
-            require('@/assets/audios/sono/bocejo.mp3'),
+            require('@/assets/audios/speechs/sono/audio_01.mp3'),
+            require('@/assets/audios/speechs/sono/audio_02.mp3'),
+            require('@/assets/audios/speechs/sono/audio_03.mp3'),
+            require('@/assets/audios/speechs/sono/bocejo.mp3'),
             // ... adicione até o 10
         ],
         textos: [
@@ -133,10 +153,10 @@ export const LOCAL_ASSETS = {
     },
     aoAcordar: {
         audios: [
-            require('@/assets/audios/aoAcordar/audio_01.mp3'),
-            require('@/assets/audios/aoAcordar/audio_02.mp3'),
-            require('@/assets/audios/aoAcordar/audio_03.mp3'),
-            require('@/assets/audios/aoAcordar/audio_04.mp3'),
+            require('@/assets/audios/speechs/aoAcordar/audio_01.mp3'),
+            require('@/assets/audios/speechs/aoAcordar/audio_02.mp3'),
+            require('@/assets/audios/speechs/aoAcordar/audio_03.mp3'),
+            require('@/assets/audios/speechs/aoAcordar/audio_04.mp3'),
             // ... adicione até o 10
         ],
         textos: [

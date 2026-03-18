@@ -213,7 +213,6 @@ export default function HomeScreen() {
 
   async function loadState() {
     if (!token) return;
-    console.log(weather);
     try {
       const state = await fetchSliviState(token);
       setEmotion(state.emotion);
@@ -256,9 +255,10 @@ export default function HomeScreen() {
     // Se ele já estiver dormindo, aborta a programação
     if (isSleepingRef.current) return;
 
-    const min = 4000;
-    const max = 12000;
+    const min = 40000;
+    const max = 120000;
     const randomDelay = Math.floor(Math.random() * (max - min)) + min;
+    console.log("tempo: ", randomDelay);
 
 
     speechTimeoutRef.current = setTimeout(() => {
@@ -315,18 +315,22 @@ export default function HomeScreen() {
     if (isSpeaking) return;
 
     try {
+      if(sound){
+        await sound.unloadAsync();
+        setSound(null)
+      }
       setSpeechText(text);
       setIsSpeaking(true);
       startTalkingAnimation();
 
-      const { sound } = await Audio.Sound.createAsync(
+      const { sound: newSound } = await Audio.Sound.createAsync(
         audio,
         { shouldPlay: true },
         (status: any) => {
           if (status.isLoaded && status.didJustFinish) {
             setIsSpeaking(false);
             stopTalkingAnimation();
-            sound.unloadAsync();
+            newSound.unloadAsync();
 
             if (onFinish) onFinish();
           }
@@ -351,7 +355,6 @@ export default function HomeScreen() {
 
     try {
       let categoriaSorteada = categoriaForcada;
-      console.log("categoria inicial:", categoriaSorteada);
 
       if (!categoriaSorteada) {
         speechCountRef.current++;
@@ -424,6 +427,7 @@ export default function HomeScreen() {
 
       playSpeech(selectedAudio, selectedText, () => {
         scheduleNextSpeech();
+
       });
 
     } catch (error) {
@@ -464,6 +468,7 @@ export default function HomeScreen() {
   const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   function startEatingAnimation(food: any) {
+     setIsSpeaking(false);
     setCurrentFoodKey(food.image_key);
     setCurrentFoodId(food.id);
     setFoodStage(0);
@@ -492,7 +497,7 @@ export default function HomeScreen() {
           await feedSlivi(currentFoodId);
           await loadState();
 
-          handleSliviSpeech('aleatorio', true);
+          handleSliviSpeech('fimComer', true);
         } catch (error) {
           Alert.alert("Erro", "Não foi possível computar a alimentação.");
         }
@@ -569,7 +574,6 @@ export default function HomeScreen() {
 
 
   const currentBgImage = WEATHER_IMAGES[weather.condition] || WEATHER_IMAGES.sun;
-  console.log("dados do weather: ", weather.temp);
 
   // Pega os caminhos (ex: "/pants/...") do estado sliviClothing 
   // e busca a imagem correspondente no nosso dicionário CLOTHES_IMAGES.
@@ -716,11 +720,14 @@ export default function HomeScreen() {
 
               <TouchableOpacity style={styles.dropdownItem}
                 onPress={() => {
+                  // router.push({
+                  //   pathname: './games/GameQuiz/GameMenuScreen',
+                  //   params: { emotion: emotion }
+                  // })
                   router.push({
-                    pathname: './games/GameQuiz/GameMenuScreen',
-                    params: { emotion: emotion }
-                  })
-
+                    pathname: "/games/ItemUnlocked",
+                    params: { clothId: '7' } // Enviamos o ID para a nova tela
+                  });
                   // router.replace({
                   //   pathname: '/games/GameQuiz/GameOverScreen',
                   //   params: { 

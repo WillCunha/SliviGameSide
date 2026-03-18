@@ -24,7 +24,6 @@ export default function GameMenuScreen() {
       body: JSON.stringify({ isPublic: false })
     });
     const data = await res.json();
-    console.log(data);
     setLoading(false);
 
     router.push({
@@ -81,7 +80,6 @@ export default function GameMenuScreen() {
       },
     });
     const data = await res.json();
-    console.log(data);
     setLoading(false);
 
     if (data.data.status === 'playing') {
