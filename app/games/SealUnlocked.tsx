@@ -50,7 +50,7 @@ export default function SealUnlocked() {
   const handleNext = () => {
     if (isLastSeal) {
       // Se acabou, volta pra tela anterior (ou pro menu principal)
-      router.push('../home');
+      router.push('../loading');
     } else {
       // Passa pro próximo selo que ele ganhou
       setCurrentIndex((prev) => prev + 1);

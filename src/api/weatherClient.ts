@@ -7,6 +7,7 @@ export type WeatherState = {
   condition: 'sun' | 'rain' | 'cloudy' | 'night';
   temp: number;
   is_day: boolean;
+  hour: number;
 };
 
 export async function syncUserLocation(userId: number): Promise<WeatherState | null> {
@@ -37,9 +38,9 @@ export async function syncUserLocation(userId: number): Promise<WeatherState | n
     });
 
     const json = await response.json();
-
+    console.log(json.data.weather);
     if (json.success) {
-      return json.data.weather; // Retorna o objeto { temp, condition, is_day }
+      return json.data.weather; // Retorna o objeto { temp, condition, is_day, hour }
     } else {
       console.error('Erro na API:', json.error);
       return null;

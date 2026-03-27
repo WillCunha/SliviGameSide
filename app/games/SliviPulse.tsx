@@ -1,18 +1,21 @@
+import { CLOTHES_IMAGES } from '@/src/components/clothes/clothesMap';
 import { getObjectives, sendGameScore } from '@/src/services/gameService';
 import { Emotion } from '@/src/types/emotions';
+import { Audio } from 'expo-av';
 import * as Haptics from 'expo-haptics';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Dimensions,
-    Easing,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Animated,
+  Dimensions,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import Slivi from '../../components/slivi';
+
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -79,6 +82,19 @@ type GameObjective = {
 
 /* ================= COMPONENT ================= */
 export default function SliviPulse({ emotion }: { emotion: Emotion }) {
+
+  const params = useLocalSearchParams();
+
+  const sliviEmotion = params.emotion;
+  console.log(sliviEmotion);
+
+  const clothingParam = typeof params.clothing === 'string' ? params.clothing : '[]';
+  const clothingPaths: string[] = JSON.parse(clothingParam);
+
+  const resolvedClothingItems = clothingPaths
+    .map(path => CLOTHES_IMAGES[path])
+    .filter(Boolean);
+
   // --- REFS ---
   const y = useRef(SCREEN_HEIGHT / 2);
   const velocity = useRef(0);
@@ -120,6 +136,28 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
   const [bonusBoxes, setBonusBoxes] = useState(0);
   const [magneticBoxes, setMagneticBoxes] = useState(0);
   const [ghostBoxes, setGhostBoxes] = useState(0);
+
+  // ✅ NOVO: Refs para espelhar os valores na hora do Game Over
+  const scoreRef = useRef(0);
+  const jumpsRef = useRef(0);
+  const bonusBoxesRef = useRef(0);
+  const maxComboRef = useRef(0);
+  const totalBoxesRef = useRef(0);
+  const moodValueRef = useRef(EMOTION_TO_MOOD[emotion] || 60);
+
+  // Estados fim de jogo
+  const [gameOverRewards, setGameOverRewards] = useState<any>(null);
+  const [isSavingScore, setIsSavingScore] = useState(false);
+
+  useEffect(() => { scoreRef.current = score; }, [score]);
+  useEffect(() => { jumpsRef.current = jumps; }, [jumps]);
+  useEffect(() => { bonusBoxesRef.current = bonusBoxes; }, [bonusBoxes]);
+  useEffect(() => { maxComboRef.current = maxCombo; }, [maxCombo]);
+  useEffect(() => { totalBoxesRef.current = totalBoxes; }, [totalBoxes]);
+  useEffect(() => { moodValueRef.current = moodValue; }, [moodValue]);
+
+  // Musica
+  const [bgMusic, setBgMusic] = useState<Audio.Sound | null>(null);
 
   const usedMagnetInRun = useRef(false);
   const usedFeverInRun = useRef(false);
@@ -298,6 +336,46 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
     });
   }, [boxes, mistakes, magnetActive, isFever]);
 
+  // Função para dar play na música
+  const playBackgroundMusic = async () => {
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        require('@/assets/audios/music/slivi_pulse.mp3'), // ⚠️ Ajuste o caminho para a sua música!
+        {
+          isLooping: true, // Faz a música tocar infinitamente
+          volume: 0.5      // Ajuste o volume se achar muito alto (0.0 a 1.0)
+        }
+      );
+      setBgMusic(sound);
+      await sound.playAsync();
+    } catch (error) {
+      console.log("Erro ao tocar música:", error);
+    }
+  };
+
+  // Função para parar a música
+  const stopBackgroundMusic = async () => {
+    if (bgMusic) {
+      await bgMusic.stopAsync();
+      await bgMusic.unloadAsync(); // Importante para liberar a memória!
+      setBgMusic(null);
+    }
+  };
+
+  useEffect(() => {
+    // Se o jogo acabou de começar e NÃO está em Game Over, dá o play!
+    if (started && !gameOver) {
+      playBackgroundMusic();
+    }
+
+    // Cleanup: Se o usuário sair da tela do jogo do nada, descarrega a música da memória
+    return () => {
+      if (bgMusic) {
+        bgMusic.unloadAsync();
+      }
+    };
+  }, [started, gameOver]); //
+
   /* ================= ACTIONS ================= */
   function resolveBox(box: GameBox) {
     setBoxes(prev => prev.filter(b => b.id !== box.id));
@@ -368,53 +446,62 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
     setGameOver(true);
     triggerShake();
     setMoodValue(0);
+    stopBackgroundMusic();
+
     if (startTime.current) {
       const duration = Math.round((Date.now() - startTime.current) / 1000);
+      setIsSavingScore(true); // Inicia o loading
 
       try {
-        // Precisamos que sendGameScore seja 'await' e retorne os dados do PHP
         const response = await sendGameScore({
           game: 'pulse',
-          score,
+          score: scoreRef.current,
           duration,
-          finalEmotionValue: moodValue,
+          finalEmotionValue: moodValueRef.current,
           finalEmotionState: currentEmotion,
           stats: {
-            "total_jumps": 500,
-            "max_combo": 150,
-            "total_boxes": 120,
-            "errors": 0,
-            "perfect_run": true,
-            "used_magnet": false,
-            "run_duration": 180
+            "max_score": scoreRef.current,
+            "total_jumps": jumpsRef.current,
+            "bonus_boxes": bonusBoxesRef.current,
+            "max_combo": maxComboRef.current,
+            "total_boxes": totalBoxesRef.current,
+            "run_duration": duration
           }
         });
 
-        if (response.success) {
-          const { unlocked_clothes, unlocked_seals } = response.data;
-
-          // Prioridade 1: Se ganhou uma roupa nova
-          if (unlocked_clothes && unlocked_clothes.length > 0) {
-            router.push({
-              pathname: "./ItemUnlocked",
-              params: { clothId: unlocked_clothes[0] } // Enviamos o ID para a nova tela
-            });
-          }
-          // Prioridade 2: Se não ganhou roupa, mas ganhou selo
-          else if (unlocked_seals && unlocked_seals.length > 0) {
-            router.push({
-              pathname: "/games/SealUnlocked",
-              params: { seals: JSON.stringify(unlocked_seals) }
-            });
-          }
-          // Se não ganhou nada, volta para o Slivi
-          else {
-            router.replace("../home")
-          }
+        if (response) {
+          console.log("Score salvo:", response);
+          setGameOverRewards(response); // Guarda a resposta para usar no clique
         }
       } catch (err) {
         console.error("Erro ao enviar score", err);
+      } finally {
+        setIsSavingScore(false); // Finaliza o loading
       }
+    }
+  }
+
+  function handleContinue() {
+    // Se por algum motivo falhou ou não tem dados, volta para a home como fallback
+    if (!gameOverRewards) {
+      router.replace("../loading");
+      return;
+    }
+
+    const { unlocked_clothes, unlocked_seals } = gameOverRewards;
+
+    if (unlocked_clothes && unlocked_clothes.length > 0) {
+      router.push({
+        pathname: "./ItemUnlocked",
+        params: { clothId: unlocked_clothes[0] }
+      });
+    } else if (unlocked_seals && unlocked_seals.length > 0) {
+      router.push({
+        pathname: "/games/SealUnlocked",
+        params: { seals: JSON.stringify(unlocked_seals) }
+      });
+    } else {
+      router.replace("../loading");
     }
   }
 
@@ -539,123 +626,144 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
       onPressOut={() => pressing.current = false}
       onPress={gameOver ? restart : undefined}
     >
-      <Animated.View style={[styles.container, { backgroundColor, transform: [{ translateX: shakeAnim }] }]}>
+      {/* Container Externo: Animação de background via JS */}
+      <Animated.View style={[styles.container, { backgroundColor }]}>
 
-        {/* --- CLOUDS --- */}
-        {clouds.map(c => (
-          <Animated.View key={c.id} style={[styles.cloud, {
-            top: c.y, width: c.width, opacity: cloudOpacity,
-            transform: [{ translateX: c.x }, { scale: c.scale }]
-          }]}>
-            <View style={styles.cloudBubbleMain} />
-            <View style={[styles.cloudBubble, { left: -15, top: 10 }]} />
-            <View style={[styles.cloudBubble, { right: -15, top: 10 }]} />
-          </Animated.View>
-        ))}
+        {/* Container Interno: Animação de Transform (Shake) via Nativo */}
+        <Animated.View style={{ flex: 1, transform: [{ translateX: shakeAnim }] }}>
+          {/* --- CLOUDS --- */}
+          {clouds.map(c => (
+            <Animated.View key={c.id} style={[styles.cloud, {
+              top: c.y, width: c.width, opacity: cloudOpacity,
+              transform: [{ translateX: c.x }, { scale: c.scale }]
+            }]}>
+              <View style={styles.cloudBubbleMain} />
+              <View style={[styles.cloudBubble, { left: -15, top: 10 }]} />
+              <View style={[styles.cloudBubble, { right: -15, top: 10 }]} />
+            </Animated.View>
+          ))}
 
-        {isFever && <View style={styles.feverOverlay} />}
+          {isFever && <View style={styles.feverOverlay} />}
 
-        {/* --- HUD --- */}
-        <View style={styles.hudTop}>
-          {/* Lado Esquerdo: Emoção e Vida */}
-          <View>
-            <Text style={styles.hudText}>Emoção Atual: {currentEmotion} (x{emotionMultiplier(currentEmotion)})</Text>
-            <View style={{ flexDirection: 'row', marginTop: 4 }}>
-              {Array.from({ length: MAX_MISTAKES }).map((_, i) => (
-                <Text key={i} style={{ opacity: i < (MAX_MISTAKES - mistakes) ? 1 : 0.2 }}>❤️</Text>
-              ))}
+          {/* --- HUD --- */}
+          <View style={styles.hudTop}>
+            {/* Lado Esquerdo: Emoção e Vida */}
+            <View>
+              <Text style={styles.hudText}>Emoção Atual: {currentEmotion} (x{emotionMultiplier(currentEmotion)})</Text>
+              <View style={{ flexDirection: 'row', marginTop: 4 }}>
+                {Array.from({ length: MAX_MISTAKES }).map((_, i) => (
+                  <Text key={i} style={{ opacity: i < (MAX_MISTAKES - mistakes) ? 1 : 0.2 }}>❤️</Text>
+                ))}
+              </View>
+            </View>
+
+            {/* Lado Direito: Score */}
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={[styles.score, { color: isFever ? COLORS.BONUS : '#fff' }]}>{score}</Text>
+              {/* RENDERIZAÇÃO DOS OBJETIVOS */}
+              {objectives.map(obj => {
+                const completed = isObjectiveComplete(obj);
+                return (
+                  <View key={obj.id} style={{ alignItems: 'flex-end', marginBottom: 2 }}>
+                    <Text style={[styles.hudText, { fontSize: 12, opacity: completed ? 0.6 : 1 }]}>
+                      Objetivo:
+                    </Text>
+                    <Text style={[styles.hudText, { fontSize: 12, opacity: completed ? 0.6 : 1 }]}>
+                      {obj.title || `${obj.description}`}
+                    </Text>
+                    {completed && <Text style={{ color: COLORS.POSITIVE, marginLeft: 6, fontWeight: 'bold' }}>✓</Text>}
+                  </View>
+                );
+              })}
+              {magnetActive && <Text style={styles.magnetText}>MAGNET ON</Text>}
             </View>
           </View>
 
-          {/* Lado Direito: Score */}
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={[styles.score, { color: isFever ? COLORS.BONUS : '#fff' }]}>{score}</Text>
-            {/* RENDERIZAÇÃO DOS OBJETIVOS */}
-            {objectives.map(obj => {
-              const completed = isObjectiveComplete(obj);
-              return (
-                <View key={obj.id} style={{ alignItems: 'flex-end', marginBottom: 2 }}>
-                  <Text style={[styles.hudText, { fontSize: 12, opacity: completed ? 0.6 : 1 }]}>
-                    Objetivo:
-                  </Text>
-                  <Text style={[styles.hudText, { fontSize: 12, opacity: completed ? 0.6 : 1 }]}>
-                    {obj.title || `${obj.description}`}
-                  </Text>
-                  {completed && <Text style={{ color: COLORS.POSITIVE, marginLeft: 6, fontWeight: 'bold' }}>✓</Text>}
-                </View>
-              );
-            })}
-            {magnetActive && <Text style={styles.magnetText}>MAGNET ON</Text>}
+          {/* --- BARRA DE FEVER --- */}
+          {isFever && (
+            <View style={styles.feverBarContainer}>
+              <Animated.View style={[styles.feverBarFill, { width: feverBarWidth }]} />
+              <Text style={styles.feverBarText}>FEVER TIME!</Text>
+            </View>
+          )}
+
+          {/* --- SLIVI --- */}
+          <View style={{ position: 'absolute', top: y.current, left: SLIVI_X, width: SLIVI_SIZE, height: SLIVI_SIZE }}>
+            {isFever && <View style={styles.aura} />}
+            <Slivi
+              emotion={currentEmotion}
+              size={300}
+              clothingItems={resolvedClothingItems}
+            />
           </View>
-        </View>
 
-        {/* --- BARRA DE FEVER --- */}
-        {isFever && (
-          <View style={styles.feverBarContainer}>
-            <Animated.View style={[styles.feverBarFill, { width: feverBarWidth }]} />
-            <Text style={styles.feverBarText}>FEVER TIME!</Text>
-          </View>
-        )}
+          {/* --- PARTICLES --- */}
+          {particles.map(p => (
+            <Animated.View key={p.id} style={[styles.particle, {
+              backgroundColor: p.color, opacity: p.opacity,
+              transform: [{ translateX: p.x }, { translateY: p.y }]
+            }]} />
+          ))}
 
-        {/* --- SLIVI --- */}
-        <View style={{ position: 'absolute', top: y.current, left: SLIVI_X, width: SLIVI_SIZE, height: SLIVI_SIZE }}>
-          {isFever && <View style={styles.aura} />}
-          <Slivi
-            emotion={currentEmotion}
-            size={300}
-            clothingItems={[require('@/assets/images/clothes/normal/pants/black_hoodie_simplev2.png')]}
-          />
-        </View>
+          {/* --- BOXES --- */}
+          {boxes.map(box => (
+            <View key={box.id} style={[styles.box, {
+              left: box.x, top: box.y,
+              backgroundColor: COLORS[box.type] || '#fff',
+              opacity: box.type === 'GHOST' ? 0.3 : 1,
+              borderWidth: box.type === 'GHOST' ? 1 : 0, borderColor: '#fff',
+              elevation: box.type === 'MAGNET' ? 10 : 0
+            }]}>
+              {box.type === 'POSITIVE' && <Text style={styles.boxText}>+{box.basePoints}</Text>}
+              {box.type === 'BONUS' && <Text style={styles.boxText}>★</Text>}
+              {box.type === 'MAGNET' && <Text style={styles.boxText}>🧲</Text>}
+              {box.type === 'GHOST' && <Text style={styles.boxText}>👻</Text>}
+              {box.type === 'NEGATIVE' && <Text style={styles.boxText}>X</Text>}
+            </View>
+          ))}
 
-        {/* --- PARTICLES --- */}
-        {particles.map(p => (
-          <Animated.View key={p.id} style={[styles.particle, {
-            backgroundColor: p.color, opacity: p.opacity,
-            transform: [{ translateX: p.x }, { translateY: p.y }]
-          }]} />
-        ))}
+          {/* --- FLOATING TEXT --- */}
+          {floatingTexts.map(t => (
+            <Animated.Text key={t.id} style={[styles.floatingText, {
+              left: t.x, top: t.y, color: t.color, opacity: t.opacity,
+              transform: [{ translateY: t.translateY }]
+            }]}>{t.text}</Animated.Text>
+          ))}
 
-        {/* --- BOXES --- */}
-        {boxes.map(box => (
-          <View key={box.id} style={[styles.box, {
-            left: box.x, top: box.y,
-            backgroundColor: COLORS[box.type] || '#fff',
-            opacity: box.type === 'GHOST' ? 0.3 : 1,
-            borderWidth: box.type === 'GHOST' ? 1 : 0, borderColor: '#fff',
-            elevation: box.type === 'MAGNET' ? 10 : 0
-          }]}>
-            {box.type === 'POSITIVE' && <Text style={styles.boxText}>+{box.basePoints}</Text>}
-            {box.type === 'BONUS' && <Text style={styles.boxText}>★</Text>}
-            {box.type === 'MAGNET' && <Text style={styles.boxText}>🧲</Text>}
-            {box.type === 'GHOST' && <Text style={styles.boxText}>👻</Text>}
-            {box.type === 'NEGATIVE' && <Text style={styles.boxText}>X</Text>}
-          </View>
-        ))}
+          {/* --- OVERLAYS --- */}
+          {!started && !gameOver && (
+            <View style={styles.centerOverlay}>
+              <Text style={styles.overlayTitle}>Slivi Pulse</Text>
+              <Text style={styles.overlaySubtitle}>Toque para começar</Text>
+            </View>
+          )}
 
-        {/* --- FLOATING TEXT --- */}
-        {floatingTexts.map(t => (
-          <Animated.Text key={t.id} style={[styles.floatingText, {
-            left: t.x, top: t.y, color: t.color, opacity: t.opacity,
-            transform: [{ translateY: t.translateY }]
-          }]}>{t.text}</Animated.Text>
-        ))}
+          {gameOver && (
+            <View style={styles.centerOverlay}>
+              <Text style={[styles.overlayTitle, { color: COLORS.NEGATIVE }]}>GAME OVER</Text>
+              <Text style={styles.overlaySubtitle}>Score: {score}</Text>
 
-        {/* --- OVERLAYS --- */}
-        {!started && !gameOver && (
-          <View style={styles.centerOverlay}>
-            <Text style={styles.overlayTitle}>Slivi Pulse</Text>
-            <Text style={styles.overlaySubtitle}>Toque para pular</Text>
-          </View>
-        )}
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation(); // Impede que o clique reinicie o jogo acidentalmente
+                  if (!isSavingScore) handleContinue();
+                }}
+                style={{
+                  marginTop: 20,
+                  borderRadius: 10,
+                  backgroundColor: isSavingScore ? '#ccc' : '#FFD700',
+                  padding: 12,
+                  paddingHorizontal: 24
+                }}
+              >
+                <Text style={{ color: '#0d1117', fontWeight: 'bold', fontSize: 16 }}>
+                  {isSavingScore ? 'SALVANDO...' : 'CONTINUAR'}
+                </Text>
+              </Pressable>
+            </View>
+          )}
 
-        {gameOver && (
-          <View style={styles.centerOverlay}>
-            <Text style={[styles.overlayTitle, { color: COLORS.NEGATIVE }]}>GAME OVER</Text>
-            <Text style={styles.overlaySubtitle}>Score: {score}</Text>
-            <Text style={{ color: '#aaa', marginTop: 10 }}>Toque para reiniciar</Text>
-          </View>
-        )}
-
+        </Animated.View>
       </Animated.View>
     </Pressable>
   );

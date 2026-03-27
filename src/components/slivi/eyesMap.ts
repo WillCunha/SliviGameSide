@@ -44,7 +44,6 @@ export const EYES_BY_EMOTION: Record<Emotion, EyeFrame[]> = {
     { src: require('../../../assets/images/personagem/eyes/olho_cansado_centro.png'), weight: 100 },
   ],
 
-  // Dica: Para 'DORMINDO', use olhos fechados.
   DORMINDO: [
     { src: require('../../../assets/images/personagem/eyes/olho_dormindo.png'), weight: 100 },
   ]

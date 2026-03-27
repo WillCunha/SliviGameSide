@@ -12,9 +12,15 @@ export const NaturalEyes = ({ emotion = 'FELIZ', size = 120 }: Props) => {
   const EYES = (EYES_BY_EMOTION as any)[emotion] ?? EYES_BY_EMOTION.FELIZ;
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  const safeIndex = currentIndex >= EYES.length ? 0 : currentIndex;
+  const currentEye = EYES[safeIndex];
 
   useEffect(() => {
-    let timeout: number;
+    setCurrentIndex(0);
+  }, [emotion]);
+
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
 
     const weightedRandom = () => {
       const total = EYES.reduce((acc: number, e: any) => acc + e.weight, 0);
@@ -30,7 +36,11 @@ export const NaturalEyes = ({ emotion = 'FELIZ', size = 120 }: Props) => {
 
     const animate = () => {
       let next = weightedRandom();
-      if (next === currentIndex) next = weightedRandom();
+
+      // Evita repetir o mesmo frame em sequência, a menos que só exista 1 frame
+      if (next === safeIndex && EYES.length > 1) {
+        next = weightedRandom();
+      }
 
       setCurrentIndex(next);
 
@@ -40,7 +50,8 @@ export const NaturalEyes = ({ emotion = 'FELIZ', size = 120 }: Props) => {
       if (r < 0.25) delay = 300 + Math.random() * 600;
       if (r > 0.95) {
         delay = 150;
-        setTimeout(() => setCurrentIndex(weightedRandom()), 150);
+        // Limpa o timeout interno caso o componente desmonte rápido
+        timeout = setTimeout(() => setCurrentIndex(weightedRandom()), 150);
       }
 
       timeout = setTimeout(animate, delay);
@@ -48,12 +59,15 @@ export const NaturalEyes = ({ emotion = 'FELIZ', size = 120 }: Props) => {
 
     animate();
     return () => clearTimeout(timeout);
-  }, [emotion, currentIndex]);
+  }, [emotion, safeIndex, EYES]);
+
+  // Prevenção extra caso o objeto da emoção não tenha nenhum frame configurado no map
+  if (!currentEye) return null;
 
   return (
     <View style={styles.container}>
       <Image
-        source={EYES[currentIndex].src}
+        source={currentEye.src}
         style={{
           width: size,
           height: size,

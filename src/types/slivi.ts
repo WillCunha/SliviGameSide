@@ -5,4 +5,6 @@ export interface SliviState {
   emotion: Emotion;
   states: any;
   clothing: any;
+  xpLevel: any;
+  
 }

@@ -45,8 +45,8 @@ export const LOCAL_ASSETS = {
             "Hahaha! Haha! Ai 'carai', viu... 'pera', por que to rindo mesmo?",
             "Hehe, hihi, hahaha.",
             "Li li... la la... lu lu... Vai toma...  água cara, 'cê' vai ficar com sede!",
-            "Será que se eu correr em círculos rápido o suficiente… será que eu encontro meu passado?",
             "Será que pizza no café da manhã conta como café… ou como pizza?",
+            "Será que se eu correr em círculos rápido o suficiente… será que eu encontro meu passado?",
             "Tã tã tã, nã nã nã, nã nã nã… espera, no que eu 'tava' pensando mesmo?",
             "Às vezes eu fico pensando… será que alguém está me olhando através de uma tela agora?",
         ]

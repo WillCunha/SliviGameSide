@@ -3,6 +3,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+// 1. Importando o Audio do expo-av
+import { Audio } from 'expo-av';
 
 interface ClothData {
     id: number;
@@ -21,23 +23,23 @@ export default function ItemUnlocked() {
     const [loading, setLoading] = useState(true);
     const [isOpen, setIsOpen] = useState(false);
     
-    // Estado para controlar o texto dinamicamente
     const [titleText, setTitleText] = useState("VOCÊ DESBLOQUEOU UMA RECOMPENSA!");
 
-    // --- Valores Animados ---
     const boxScale = useRef(new Animated.Value(0)).current;
     const boxRotation = useRef(new Animated.Value(0)).current;
     const itemScale = useRef(new Animated.Value(0)).current;
     const itemTranslateY = useRef(new Animated.Value(50)).current; 
     
-    // Novos valores para opacidade do título e flutuações
     const titleOpacity = useRef(new Animated.Value(0)).current; 
     const buttonOpacity = useRef(new Animated.Value(0)).current;
     const floatBoxY = useRef(new Animated.Value(0)).current;
     const floatImageY = useRef(new Animated.Value(0)).current;
 
-    // Referência para podermos parar a animação da caixa depois
     const boxFloatAnimation = useRef<Animated.CompositeAnimation | null>(null);
+
+    // --- Referências para os Áudios ---
+    const soundAppearRef = useRef<Audio.Sound | null>(null);
+    const soundCoralRef = useRef<Audio.Sound | null>(null);
 
     // 1. Busca os dados da API
     useEffect(() => {
@@ -58,18 +60,48 @@ export default function ItemUnlocked() {
         if (clothId) fetchClothDetails();
     }, [clothId]);
 
-    // Função que faz a caixa flutuar continuamente
+    // --- Limpeza dos áudios ao sair da tela ---
+    useEffect(() => {
+        return () => {
+            if (soundAppearRef.current) soundAppearRef.current.unloadAsync();
+            if (soundCoralRef.current) soundCoralRef.current.unloadAsync();
+        };
+    }, []);
+
+    // --- Função para tocar os áudios ---
+    const playSound = async (type: 'appear' | 'coral') => {
+        try {
+            if (type === 'appear') {
+                // ATENÇÃO: Ajuste o caminho do áudio da caixa surgindo!
+                const { sound } = await Audio.Sound.createAsync(
+                    require('@/assets/audios/effects/box_entrance.mp3') 
+                );
+                soundAppearRef.current = sound;
+                await sound.playAsync();
+            } else if (type === 'coral') {
+                // ATENÇÃO: Ajuste o caminho do áudio do coral!
+                const { sound } = await Audio.Sound.createAsync(
+                    require('@/assets/audios/effects/coral_saida_objeto.mp3') 
+                );
+                soundCoralRef.current = sound;
+                await sound.playAsync();
+            }
+        } catch (error) {
+            console.log("Erro ao tocar o áudio:", error);
+        }
+    };
+
     const startBoxFloat = () => {
         boxFloatAnimation.current = Animated.loop(
             Animated.sequence([
                 Animated.timing(floatBoxY, {
-                    toValue: -15, // Sobe 15px
+                    toValue: -15, 
                     duration: 1200,
                     easing: Easing.inOut(Easing.ease),
                     useNativeDriver: true,
                 }),
                 Animated.timing(floatBoxY, {
-                    toValue: 0, // Volta pro eixo
+                    toValue: 0, 
                     duration: 1200,
                     easing: Easing.inOut(Easing.ease),
                     useNativeDriver: true,
@@ -79,7 +111,6 @@ export default function ItemUnlocked() {
         boxFloatAnimation.current.start();
     };
 
-    // Função que faz a IMAGEM do prêmio flutuar continuamente
     const startImageFloat = () => {
         Animated.loop(
             Animated.sequence([
@@ -102,7 +133,10 @@ export default function ItemUnlocked() {
     // 2. Animação de entrada da tela
     useEffect(() => {
         if (!loading && cloth) {
-            // Faz o texto inicial aparecer
+            
+            // TOCA O ÁUDIO DA CAIXA SURGINDO
+            playSound('appear');
+
             Animated.timing(titleOpacity, {
                 toValue: 1,
                 duration: 600,
@@ -123,7 +157,6 @@ export default function ItemUnlocked() {
                     useNativeDriver: true,
                 })
             ]).start(() => {
-                // Assim que a caixa terminar de entrar (girar e crescer), começa a flutuar
                 if (!isOpen) startBoxFloat();
             });
         }
@@ -135,24 +168,22 @@ export default function ItemUnlocked() {
 
         setIsOpen(true); 
         
-        // Para a flutuação da caixa e força ela a voltar pro chão rapidinho
+        // TOCA O CORAL QUANDO A CAIXA É CLICADA
+        playSound('coral');
+        
         if (boxFloatAnimation.current) boxFloatAnimation.current.stop();
         Animated.timing(floatBoxY, { toValue: 0, duration: 200, useNativeDriver: true }).start();
 
-        // 1. SOME com o texto atual ("Você tem um novo brinde")
         Animated.timing(titleOpacity, {
             toValue: 0,
             duration: 300,
             useNativeDriver: true,
         }).start(() => {
             
-            // 2. TROCA o texto enquanto está invisível
             setTitleText("RECOMPENSA OBTIDA!!");
 
-            // 3. FAZ A MÁGICA ACONTECER (Sobe item, aparece novo texto e botão)
             Animated.sequence([
                 Animated.parallel([
-                    // Item saindo da caixa
                     Animated.spring(itemScale, {
                         toValue: 1,
                         friction: 4,
@@ -164,21 +195,18 @@ export default function ItemUnlocked() {
                         easing: Easing.out(Easing.ease),
                         useNativeDriver: true,
                     }),
-                    // O novo texto ("PARABÉNS!") aparece junto
                     Animated.timing(titleOpacity, {
                         toValue: 1,
                         duration: 400,
                         useNativeDriver: true,
                     })
                 ]),
-                // Botão de continuar aparece no final
                 Animated.timing(buttonOpacity, {
                     toValue: 1,
                     duration: 400,
                     useNativeDriver: true,
                 })
             ]).start(() => {
-                // 4. Depois que o item já saiu da caixa, ele começa a flutuar suavemente
                 startImageFloat();
             });
         });
@@ -217,14 +245,11 @@ export default function ItemUnlocked() {
             style={styles.gradient}
         >
             <View style={styles.container}>
-                
-                {/* O TEXTO AGORA FICA SEMPRE RENDERIZADO, APENAS CONTROLANDO A OPACIDADE E O CONTEÚDO */}
                 <Animated.Text style={[styles.title, { opacity: titleOpacity }]}>
                     {titleText}
                 </Animated.Text>
 
                 <View style={styles.animationArea}>
-                    {/* O ITEM que sai da caixa */}
                     {isOpen && (
                         <Animated.View style={[
                             styles.itemContainer,
@@ -235,12 +260,11 @@ export default function ItemUnlocked() {
                                 ]
                             }
                         ]}>
-                            {/* A IMAGEM foi transformada em Animated.Image para poder flutuar de forma independente */}
                             <Animated.Image
                                 source={CLOTHES_IMAGES[cloth.slug]}
                                 style={[
                                     styles.clothImage,
-                                    { transform: [{ translateY: floatImageY }] } // Flutuação aplicada apenas à imagem!
+                                    { transform: [{ translateY: floatImageY }] } 
                                 ]}
                                 resizeMode="contain"
                             />
@@ -249,7 +273,6 @@ export default function ItemUnlocked() {
                         </Animated.View>
                     )}
 
-                    {/* A CAIXA */}
                     <Pressable onPress={handleOpenBox} disabled={isOpen}>
                         <Animated.Image
                             source={
@@ -259,9 +282,7 @@ export default function ItemUnlocked() {
                             }
                             style={[
                                 styles.boxImage,
-                                // Sombra adicionada
                                 styles.boxShadow,
-                                // A caixa ganha translateY contínuo (floatBoxY) apenas se estiver fechada
                                 !isOpen && { transform: [{ translateY: floatBoxY }, { scale: boxScale }, { rotate: spin }] }
                             ]}
                             resizeMode="contain"
@@ -269,9 +290,8 @@ export default function ItemUnlocked() {
                     </Pressable>
                 </View>
 
-                {/* BOTÃO DE CONTINUAR */}
                 <Animated.View style={{ opacity: buttonOpacity, marginTop: 40 }}>
-                    <Pressable onPress={() => router.back()} style={styles.button}>
+                    <Pressable onPress={() => router.push('../loading')} style={styles.button}>
                         <Text style={styles.buttonText}>CONTINUAR!</Text>
                     </Pressable>
                 </Animated.View>
@@ -280,94 +300,20 @@ export default function ItemUnlocked() {
     );
 }
 
+// ... seus estilos continuam iguais aqui embaixo ...
 const styles = StyleSheet.create({
-    gradient: {
-        flex: 1,
-        paddingTop: 30,
-        paddingHorizontal: 30,
-    },
-    container: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    title: {
-        fontSize: 32, // Reduzi um pouquinho para caber a frase maior
-        fontWeight: 'bold',
-        color: '#FFF',
-        marginBottom: 20,
-        textAlign: 'center',
-        textShadowColor: 'rgba(255, 215, 0, 0.5)',
-        textShadowOffset: { width: 0, height: 0 },
-        textShadowRadius: 10,
-    },
-    animationArea: {
-        width: 300,
-        height: 400,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    boxImage: {
-        width: 250,
-        height: 350,
-        zIndex: 10, 
-    },
-    // Adicionamos a classe de sombra
-    boxShadow: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 10,
-        // Elevation ajuda no Android, mas cuidado: se o PNG transparente ficar com fundo quadrado preto no Android, remova o elevation e deixe só para o iOS.
-        elevation: 10, 
-    },
-    itemContainer: {
-        position: 'absolute',
-        alignItems: 'center',
-        zIndex: 5, 
-    },
-    clothImage: {
-        width: 400,
-        height: 450,
-    },
-    clothName: {
-        fontSize: 30,
-        fontWeight: 'bold',
-        color: '#FFF',
-        marginTop: 10,
-        textAlign: 'center',
-        textTransform: 'uppercase',
-        textShadowColor: "rgba(0,0,0,0.4)",
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
-    },
-    clothCategory: {
-        fontSize: 14,
-        color: '#bebebec0',
-        textTransform: 'uppercase',
-        marginTop: 5,
-    },
-    button: {
-        backgroundColor: '#FFD700',
-        paddingVertical: 12,
-        paddingHorizontal: 30,
-        borderRadius: 25,
-        elevation: 3,
-    },
-    buttonText: {
-        color: '#000',
-        fontSize: 18,
-        fontWeight: 'bold',
-    },
-    loadingTxt: {
-        color: '#FFD700',
-        fontSize: 18,
-        marginBottom: 20,
-        fontWeight: '800', // As aspas aqui evitam avisos no React Native moderno
-    },
-    errorText: {
-        color: '#FF5555',
-        fontSize: 18,
-        marginBottom: 20,
-    }
+    gradient: { flex: 1, paddingTop: 30, paddingHorizontal: 30 },
+    container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    title: { fontSize: 32, fontWeight: 'bold', color: '#FFF', marginBottom: 20, textAlign: 'center', textShadowColor: 'rgba(255, 215, 0, 0.5)', textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10 },
+    animationArea: { width: 300, height: 400, justifyContent: 'center', alignItems: 'center' },
+    boxImage: { width: 250, height: 350, zIndex: 10 },
+    boxShadow: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 10 },
+    itemContainer: { position: 'absolute', alignItems: 'center', zIndex: 5 },
+    clothImage: { width: 400, height: 450 },
+    clothName: { fontSize: 30, fontWeight: 'bold', color: '#FFF', marginTop: 10, textAlign: 'center', textTransform: 'uppercase', textShadowColor: "rgba(0,0,0,0.4)", textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 4 },
+    clothCategory: { fontSize: 14, color: '#bebebec0', textTransform: 'uppercase', marginTop: 5 },
+    button: { backgroundColor: '#FFD700', paddingVertical: 12, paddingHorizontal: 30, borderRadius: 25, elevation: 3 },
+    buttonText: { color: '#000', fontSize: 18, fontWeight: 'bold' },
+    loadingTxt: { color: '#FFD700', fontSize: 18, marginBottom: 20, fontWeight: '800' },
+    errorText: { color: '#FF5555', fontSize: 18, marginBottom: 20 }
 });

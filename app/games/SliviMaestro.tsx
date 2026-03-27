@@ -1,7 +1,9 @@
 import River from '@/components/River';
+import { CLOTHES_IMAGES } from '@/src/components/clothes/clothesMap';
 import { getObjectives, sendGameScore } from '@/src/services/gameService';
 import { Emotion } from '@/src/types/emotions';
-import { router } from 'expo-router';
+import { Audio } from 'expo-av';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
     Dimensions,
@@ -29,6 +31,8 @@ const ITEM_SPEED_BASE = 3.5;
 const MAX_ENERGY = 100;
 const ENERGY_DECAY = -0.05; // 📉 Agora a energia CAI com o tempo!
 const MAX_LIVES = 5;        // ❤️ Máximo de corações
+
+
 
 /* =====================
    TIPOS E HELPER
@@ -89,6 +93,15 @@ function getInitialConfig(emotion: Emotion) {
    COMPONENTE PRINCIPAL
 ===================== */
 export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestroProps) {
+    const params = useLocalSearchParams();
+
+    const clothingParam = typeof params.clothing === 'string' ? params.clothing : '[]';
+    const clothingPaths: string[] = JSON.parse(clothingParam);
+
+    const resolvedClothingItems = clothingPaths
+        .map(path => CLOTHES_IMAGES[path])
+        .filter(Boolean);
+
     const [started, setStarted] = useState(false);
     const [gameOver, setGameOver] = useState(false);
 
@@ -103,6 +116,10 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
     const [riverSpeed, setRiverSpeed] = useState(1.0);
 
     const [objectives, setObjectives] = useState<GameObjective[]>([]);
+
+    // Musica
+    // Musica
+    const [bgMusic, setBgMusic] = useState<Audio.Sound | null>(null);
 
     //STATS
     const [stats, setStats] = useState({
@@ -245,6 +262,32 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
             },
         })
     ).current;
+
+    // Função para dar play na música
+    const playBackgroundMusic = async () => {
+        try {
+            const { sound } = await Audio.Sound.createAsync(
+                require('@/assets/audios/music/slivi_river.mp3'), // ⚠️ Ajuste o caminho para a sua música!
+                {
+                    isLooping: true, // Faz a música tocar infinitamente
+                    volume: 0.5      // Ajuste o volume se achar muito alto (0.0 a 1.0)
+                }
+            );
+            setBgMusic(sound);
+            await sound.playAsync();
+        } catch (error) {
+            console.log("Erro ao tocar música:", error);
+        }
+    };
+
+    // Função para parar a música
+    const stopBackgroundMusic = async () => {
+        if (bgMusic) {
+            await bgMusic.stopAsync();
+            await bgMusic.unloadAsync(); // Importante para liberar a memória!
+            setBgMusic(null);
+        }
+    };
 
     /* =====================
        COLISÃO E EFEITOS
@@ -411,6 +454,7 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
         setEnergy(MAX_ENERGY);
         setLives(MAX_LIVES); // Reseta os corações
         refreshObjectives();
+        playBackgroundMusic();
 
         setStats({
             total_boxes: 0,
@@ -445,6 +489,7 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
     async function endGame() {
         setGameOver(true);
         setStarted(false);
+        stopBackgroundMusic();
         Vibration.cancel();
 
         const duration = startTime.current
@@ -607,7 +652,7 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
                 <Slivi
                     emotion={currentEmotion}
                     size={SLIVI_SIZE}
-                    clothingItems={[require('@/assets/images/clothes/normal/pants/black_hoodie_simplev2.png')]} />
+                    clothingItems={resolvedClothingItems} />
             </View>
 
             {items.map(item => (

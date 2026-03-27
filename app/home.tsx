@@ -1,8 +1,9 @@
-import { Audio } from 'expo-av'; // <--- IMPORT DO ÁUDIO
+import { Audio } from 'expo-av';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Dimensions,
   Image,
   StyleSheet,
@@ -24,8 +25,8 @@ import Notification from '@/components/Modal/Notification';
 import StatesModal from '@/components/Modal/States';
 import WindowCleanerAnimation from '@/components/WindowCleanerAnimation';
 import { syncUserLocation, WeatherState } from '@/src/api/weatherClient';
+import { CITY_SOUNDS } from '@/src/components/city/city';
 import { CLOTHES_IMAGES } from '@/src/components/clothes/clothesMap';
-import { FOOD_IMAGES } from '@/src/components/foods/foodMap';
 import { LOCAL_ASSETS } from '@/src/components/slivi/speechMap';
 import { dressService } from '@/src/services/dressService';
 import { feedSlivi } from '@/src/services/feedService';
@@ -41,6 +42,20 @@ const WINDOW_SIZE = width * 0.6;
 
 const MOUTH_OPEN = require('../assets/images/personagem/mouth/mouth_open.png');
 const MOUTH_CLOSED = require('../assets/images/personagem/mouth/mouth_neutro.png');
+
+const PLATE_IMAGES = {
+  GREEN: [
+    require('@/assets/images/food/plate/plate_full_green.png'),
+    require('@/assets/images/food/plate/plate_medium_green.png'),
+    require('@/assets/images/food/plate/plate_finishing_green.png'),
+  ],
+  RED: [
+    require('@/assets/images/food/plate/plate_full_red.png'),
+    require('@/assets/images/food/plate/plate_medium_red.png'),
+    require('@/assets/images/food/plate/plate_finishing_red.png'),
+  ]
+};
+
 
 const LAMP_ON = require('../assets/images/components/botoes/luz-off.png');
 const LAMP_OFF = require('../assets/images/components/botoes/luz-on.png');
@@ -83,7 +98,8 @@ export default function HomeScreen() {
   const [weather, setWeather] = useState<WeatherState>({
     condition: 'sun',
     temp: 25,
-    is_day: true
+    is_day: true,
+    hour: 12
   });
 
   // --- ESTADOS DE LUZ E SONO ---
@@ -92,22 +108,34 @@ export default function HomeScreen() {
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // A Ref é a fonte da verdade para o setTimeout conseguir checar se ele dormiu:
   const isSleepingRef = useRef(initialIsSleeping);
+  const displayEmotion = sleepState === 'DORMINDO' ? emotion : (sleepState as Emotion);
 
   // --- ESTADOS DA ANIMAÇÃO E COMIDA ---
+  const [currentPlateFoods, setCurrentPlateFoods] = useState<any[]>([]);
+  const platePan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
+  const plateRotation = useRef(new Animated.Value(0)).current;
+  const plateOpacity = useRef(new Animated.Value(0)).current;
+  const [plateColor, setPlateColor] = useState<'RED' | 'GREEN' | null>(null);
   const [foodVisible, setFoodVisible] = useState(false);
   const [foodStage, setFoodStage] = useState(0);
   const [mouthOverride, setMouthOverride] = useState<any>(null);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [currentFoodKey, setCurrentFoodKey] = useState<string | null>(null);
-  const [currentFoodId, setCurrentFoodId] = useState<number | null>(null);
   const [foodModalVisible, setFoodModalVisible] = useState(false);
+  const currentSprites = plateColor ? PLATE_IMAGES[plateColor] : [];
+
+
+  // --- TEXTO FLUTUANTE ---
+  const [currentFoodHunger, setCurrentFoodHunger] = useState<number | null>(null);
+  const [showFloatingText, setShowFloatingText] = useState(false);
+  const floatAnim = useRef(new Animated.Value(0)).current;
+  const opacityAnim = useRef(new Animated.Value(1)).current;
 
   // --- ESTADOS DE ROUPAS ---
   const [clothesModalVisible, setClothesModalVisible] = useState(false);
   const [sliviClothing, setSliviClothing] = useState<Record<string, string> | null>(null);
   const [statesModalVisible, setStatesModalVisible] = useState(false);
 
-  // --- NOVOS ESTADOS PARA FALA ---
+  // --- ESTADOS PARA FALA ---
   const [sound, setSound] = useState<Audio.Sound | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechText, setSpeechText] = useState("");
@@ -117,10 +145,29 @@ export default function HomeScreen() {
   const speechCountRef = useRef(0);
   const nextFourthWallRef = useRef(Math.floor(Math.random() * 10) + 25)
 
-  // --- MENU BOTÃO DE GAMES ---
-  const [menuOpen, setMenuOpen] = useState(false)
+  // --- AUDIOS AMBIENTE ---
+  const [ambientSound, setAmbientSound] = useState<Audio.Sound | null>(null);
+  const sfxTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // ... dentro do seu HomeScreen ...
+  // --- MENU BOTÃO DE GAMES ---
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // --- ESTADOS DE XP E NÍVEL ---
+  const [xpData, setXpData] = useState<{ currentXP: number, currentLevel: number, next_level_xp: number } | null>(
+    parsedSliviState?.xpLevel || null
+  );
+  const [showXpBar, setShowXpBar] = useState(false);
+  const xpBarOpacity = useRef(new Animated.Value(0)).current;
+  const xpProgress = useRef(new Animated.Value(parsedSliviState?.xpLevel?.currentXP || 0)).current;
+
+  // Função para interpolar o valor de XP em Porcentagem (0% a 100%)
+  const progressWidth = xpProgress.interpolate({
+    inputRange: [0, xpData?.next_level_xp || 1], // Evita travar caso o next_level venha zerado
+    outputRange: ['0%', '100%'],
+    extrapolate: 'clamp',
+  });
+
+  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
   useFocusEffect(
     useCallback(() => {
@@ -165,8 +212,6 @@ export default function HomeScreen() {
     return sound ? () => { sound.unloadAsync(); } : undefined;
   }, [sound]);
 
-  const displayEmotion = sleepState === 'DORMINDO' ? emotion : (sleepState as Emotion);
-  const currentSprites = currentFoodKey ? (FOOD_IMAGES as any)[currentFoodKey] : [];
 
   useEffect(() => {
     loadGameData();
@@ -199,26 +244,177 @@ export default function HomeScreen() {
     }
   }, [loading, isNewUser]);
 
+  useEffect(() => {
+    let currentAmbientSound: Audio.Sound | null = null;
+    let isActive = true;
+
+    // 1. CONFIGURAÇÃO DA TRILHA BASE (LOOP) ---
+    async function setupBaseAudio() {
+      if (ambientSound) {
+        await ambientSound.unloadAsync();
+        setAmbientSound(null);
+      }
+
+      let baseAsset = null;
+      let volume = 0.5;
+
+      if (weather.condition === 'rain') {
+        const isHeavyRain = Math.random() > 0.5;
+        baseAsset = isHeavyRain
+          ? require('@/assets/audios/effects/weather/rainy/heavy_rain.mp3')
+          : require('@/assets/audios/effects/weather/rainy/soft_rain.mp3');
+      } else {
+        // Se não estiver chovendo, toca o ambiente urbano de fundo
+        baseAsset = CITY_SOUNDS.ambiente.audios[0];
+        volume = 0.1; // Mais baixo para não incomodar
+      }
+
+      try {
+        const { sound: newSound } = await Audio.Sound.createAsync(baseAsset, {
+          shouldPlay: true,
+          isLooping: true,
+          volume: volume,
+        });
+        if (isActive) {
+          currentAmbientSound = newSound;
+          setAmbientSound(newSound);
+        } else {
+          newSound.unloadAsync();
+        }
+      } catch (error) {
+        console.error("Erro ao reproduzir som base:", error);
+      }
+    }
+
+    // --- 2. GERENCIADOR DE EFEITOS ESPECIAIS (SFX) ---
+    function scheduleNextSFX() {
+      if (!isActive) return;
+
+      const hour = weather.hour;
+      const isRain = weather.condition === 'rain';
+
+      // Configurações padrão de probabilidade e tempo
+      let minDelay = 10000;
+      let maxDelay = 30000;
+      let possibleSounds: string[] = [];
+
+      // Lógica de Horários e Clima
+      if (hour >= 6 && hour < 9) {
+        // Manhã: pássaros + trânsito leve
+        possibleSounds = ['birds', 'birds', 'cars'];
+        minDelay = 5000; maxDelay = 20000;
+      } else if (hour >= 9 && hour < 19) {
+        // Dia Ativo: muito trânsito, buzinas, sirenes
+        possibleSounds = ['cars', 'cars', 'cars', 'ambulance', 'police', 'fire_truck'];
+        minDelay = 3000; maxDelay = 15000;
+      } else {
+        // Noite: quase nada de buzinas
+        possibleSounds = ['cars'];
+        minDelay = 20000; maxDelay = 60000;
+      }
+
+      // Modificadores de Clima
+      if (isRain) {
+        // Chuva espanta os pássaros e diminui buzinas, mas pode ter trovão
+        possibleSounds = possibleSounds.filter(s => s !== 'birds');
+        possibleSounds.push('thunder');
+        // Aumenta o intervalo entre sons na chuva
+        minDelay *= 1.5;
+        maxDelay *= 1.5;
+      }
+
+      // Se a piscina de sons ficar vazia por algum motivo, tenta de novo mais tarde
+      if (possibleSounds.length === 0) {
+        sfxTimeoutRef.current = setTimeout(scheduleNextSFX, 10000);
+        return;
+      }
+
+      const delay = Math.floor(Math.random() * (maxDelay - minDelay)) + minDelay;
+
+      sfxTimeoutRef.current = setTimeout(async () => {
+        if (!isActive) return;
+
+        const randomCategory = possibleSounds[Math.floor(Math.random() * possibleSounds.length)];
+
+        // Verifica se a categoria existe no city.ts (evita crash se você ainda não adicionou birds/thunder)
+        const categoryData = (CITY_SOUNDS as any)[randomCategory];
+
+        if (categoryData && categoryData.audios.length > 0) {
+          const randomAudio = categoryData.audios[Math.floor(Math.random() * categoryData.audios.length)];
+
+          try {
+            const { sound: sfxSound } = await Audio.Sound.createAsync(randomAudio, { shouldPlay: true, volume: 0.4 });
+            // Descarrega o SFX da memória assim que ele terminar de tocar
+            sfxSound.setOnPlaybackStatusUpdate((status: any) => {
+              if (status.didJustFinish) {
+                sfxSound.unloadAsync();
+              }
+            });
+          } catch (error) {
+            console.error(`Erro ao tocar SFX (${randomCategory}):`, error);
+          }
+        }
+
+        // Agenda o próximo som independentemente de sucesso/falha
+        scheduleNextSFX();
+      }, delay);
+    }
+
+    // Inicia o áudio base e o agendador de efeitos
+    setupBaseAudio();
+    scheduleNextSFX();
+
+    // --- 3. CLEANUP (Desmontagem) ---
+    return () => {
+      isActive = false;
+      if (currentAmbientSound) {
+        currentAmbientSound.unloadAsync();
+      }
+      if (sfxTimeoutRef.current) {
+        clearTimeout(sfxTimeoutRef.current);
+      }
+    };
+  }, [weather.condition]); // Reexecuta se o clima mudar 
+
+
+  // --- CHAMA AS FUNÇÕES DE ATUALIZAÇÃO DE DADOS ---
   async function loadGameData() {
     setLoading(true);
     await loadState();
     await loadWeather();
     setLoading(false);
   }
-
+  
+  // --- CARREGA DADOS DO TEMPO NO LOCAL ---
   async function loadWeather() {
     const weatherData = await syncUserLocation(userId || 1);
     if (weatherData) setWeather(weatherData);
   }
-
-  async function loadState() {
+  
+  // --- CARREGA DADOS DO GAME ---
+  async function loadState(): Promise<any> {
     if (!token) return;
     try {
       const state = await fetchSliviState(token);
+
+      if (!state) {
+        console.log("caiu aqui: fetchSliviState não retornou dados!")
+        return;
+      }
+
       setEmotion(state.emotion);
       setSliviStates(state.states);
+
       if (state.clothing) {
         setSliviClothing(state.clothing);
+      }
+
+      if (state.xpLevel) {
+        setXpData(state.xpLevel);
+        // Atualiza a barra "silenciosamente" se ela não estiver animando
+        if (!showXpBar) {
+          xpProgress.setValue(state.xpLevel.currentXP);
+        }
       }
 
       if (state.isSleeping) {
@@ -234,6 +430,9 @@ export default function HomeScreen() {
           sleepTimerRef.current = null;
         }
       }
+
+      console.log("Tudo certo no loadState, retornando: ", state)
+      return state;
     } catch (err: any) {
       console.log("Erro ao carregar estado: ", err.message);
     } finally {
@@ -241,8 +440,7 @@ export default function HomeScreen() {
     }
   }
 
-  // --- LÓGICA DE FALA (NOVO) ---
-
+  // --- LÓGICA DE FALA ---
   function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
@@ -270,8 +468,6 @@ export default function HomeScreen() {
     }, randomDelay);
   }
 
-
-
   const startTalkingAnimation = () => {
     let mouthIsOpen = false;
     speechIntervalRef.current = setInterval(() => {
@@ -285,17 +481,17 @@ export default function HomeScreen() {
     setMouthOverride(null);
   };
 
-  // ... 
+  // --- (BOAS VINDAS) ---
   async function handleWelcomeSpeech() {
 
     const dialog = [
       {
         text: "Oi… que bom que você chegou — obrigado por vir fazer companhia pra mim! Vamos começar uma jornada juntos?",
-        audio: require('@/assets/audios/boasVindas/audio_01.mp3')
+        audio: require('@/assets/audios/speechs/boasVindas/audio_01.mp3')
       },
       {
         text: "'Ó', já que você chegou agora, deixa eu te explicar... Nos tracinhos ( ☰ ) ali em cima, você vê o que eu estou sentindo. Se você clicar na lâmpada (💡) para apagar a luz, eu durmo, óbvio. E não me deixa peladinho, tem que me vestir (👚) também!",
-        audio: require('@/assets/audios/boasVindas/audio_02.mp3')
+        audio: require('@/assets/audios/speechs/boasVindas/audio_02.mp3')
       }
     ];
 
@@ -315,7 +511,7 @@ export default function HomeScreen() {
     if (isSpeaking) return;
 
     try {
-      if(sound){
+      if (sound) {
         await sound.unloadAsync();
         setSound(null)
       }
@@ -436,80 +632,231 @@ export default function HomeScreen() {
     }
   }
 
-
   // --- LÓGICA DA LÂMPADA ---
   const toggleLight = async () => {
     if (isLightOn) {
+      // 1. Atualização Otimista (Front-end)
       setIsLightOn(false);
       isSleepingRef.current = true;
       setSleepState('SONOLENTO');
-      sleepSlivi().catch(err => console.log("Erro sleep:", err));
 
       const timeToSleep = Math.floor(Math.random() * 10000) + 20000;
       if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
       sleepTimerRef.current = setTimeout(() => { setSleepState('DORMINDO'); }, timeToSleep);
+
+      // 2. Aguarda o back-end processar
+      try {
+        await sleepSlivi();
+      } catch (err) {
+        console.log("Erro sleep:", err);
+      }
+
     } else {
+      // 1. Atualização Otimista (Front-end)
       setIsLightOn(true);
       setSleepState(emotion);
       isSleepingRef.current = false;
-      wakeSlivi().catch(err => console.log("Erro wake:", err));
+
       if (sleepTimerRef.current) {
         clearTimeout(sleepTimerRef.current);
         sleepTimerRef.current = null;
       }
-      loadState();
 
+      // 2. Sincronização segura com o back-end
+      try {
+        // Primeiro garantimos que o back-end registrou que ele acordou
+        await wakeSlivi();
+
+        // SÓ ENTÃO puxamos o estado novo (evitando a lâmpada piscar)
+        await loadState();
+      } catch (err) {
+        console.log("Erro wake:", err);
+      }
+
+      // 3. Verifica se ele precisa falar algo
       if (sliviStates && (sliviStates.SLEEP > 50 || sliviStates.ENERGY > 50)) {
         handleSliviSpeech('aoAcordar', true);
       }
     }
   };
 
-  const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+  // --- LÓGICA DE ALIMENTAR-SE  ---
+  const processFeeding = async (foodsArray: any[]) => {
+    if (isAnimating || isSpeaking || !foodsArray || foodsArray.length === 0) {
+      console.log("Bloqueado: Animando, Falando ou sem comida.");
+      return;
+    }
 
-  function startEatingAnimation(food: any) {
-     setIsSpeaking(false);
-    setCurrentFoodKey(food.image_key);
-    setCurrentFoodId(food.id);
-    setFoodStage(0);
-    setFoodVisible(true);
-    setIsAnimating(false);
-    setFoodModalVisible(false);
-  }
+    let meatCount = 0;
+    let vegCount = 0;
+    let totalHunger = 0;
 
-  const handleEat = async () => {
-    if (isAnimating || isSpeaking) return; // Evita comer enquanto fala
-    if (!currentSprites || currentSprites.length === 0) return;
+    foodsArray.forEach(food => {
+      totalHunger += (food.hunger || 0);
+      if (food.type?.toUpperCase() === 'MEAT') {
+        meatCount++;
+      } else {
+        vegCount++;
+      }
+    });
+
+    const decidedColor = meatCount > vegCount ? 'RED' : 'GREEN';
+    const spritesParaAnimar = PLATE_IMAGES[decidedColor];
 
     setIsAnimating(true);
-    setMouthOverride(MOUTH_OPEN);
+    setIsSpeaking(false);
+    setFoodModalVisible(false);
+
+    setPlateColor(decidedColor);
+    setCurrentPlateFoods(foodsArray);
+    setCurrentFoodHunger(totalHunger);
+    setFoodStage(0);
+    setFoodVisible(true);
+
+    plateRotation.setValue(0);
+
+    Animated.timing(plateOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    await wait(500);
+
+    const totalBites = spritesParaAnimar.length;
+
+    for (let bite = 0; bite < totalBites; bite++) {
+
+      setMouthOverride(MOUTH_OPEN);
+      await wait(200);
+
+      Animated.timing(plateRotation, {
+        toValue: 90, duration: 350, useNativeDriver: true
+      }).start();
+      await wait(350);
+      setFoodStage(bite + 1);
+
+      Animated.timing(plateRotation, {
+        toValue: 0, duration: 350, useNativeDriver: true
+      }).start();
+      await wait(150);
+      setMouthOverride(MOUTH_CLOSED);
+
+      await wait(200);
+      setMouthOverride(null);
+
+      if (bite < totalBites - 1) {
+        await wait(400);
+      }
+    }
+
+
+    Animated.timing(plateOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start();
     await wait(300);
-    setMouthOverride(MOUTH_CLOSED);
+    setFoodVisible(false);
 
-    const nextStage = foodStage + 1;
-    setFoodStage(nextStage);
-    await wait(400);
-    setMouthOverride(null);
+    try {
+      const previousXp = xpData?.currentXP || 0;
 
-    if (nextStage >= currentSprites.length - 1) {
-      if (currentFoodId) {
-        try {
-          await feedSlivi(currentFoodId);
-          await loadState();
+      for (const food of foodsArray) {
+        await feedSlivi(food.id);
+      }
 
-          handleSliviSpeech('fimComer', true);
-        } catch (error) {
-          Alert.alert("Erro", "Não foi possível computar a alimentação.");
+      const newState = await loadState();
+      if (newState && newState.xpLevel) {
+        const newXp = newState.xpLevel.currentXP;
+        if (newXp > previousXp) {
+          triggerXpBarAnimation(previousXp, newXp);
         }
       }
-      setFoodVisible(false);
-      setCurrentFoodKey(null);
-      setCurrentFoodId(null);
+      handleSliviSpeech('fimComer', true);
+      triggerFloatingText();
+    } catch (error) {
+      Alert.alert("Erro", "Não foi possível computar a alimentação.");
     }
+
+    // Limpeza
+    setPlateColor(null);
+    setCurrentPlateFoods([]);
     setIsAnimating(false);
   };
 
+  // --- TEXTO DE PONTUAÇÃO FLUTUANTE ---
+  const triggerFloatingText = () => {
+    setShowFloatingText(true);
+    floatAnim.setValue(0);
+    opacityAnim.setValue(1);
 
+    Animated.parallel([
+      Animated.timing(floatAnim, {
+        toValue: -150, // Sobe 150 pixels na tela
+        duration: 1500, // Duração de 1.5 segundos
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0, // Desaparece
+        duration: 1500,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      // Quando a animação acaba, limpamos a tela
+      setShowFloatingText(false);
+      setCurrentFoodHunger(null);
+    });
+  };
+
+  // --- LOGOUT ---
+  async function handleLogout() {
+    Alert.alert('Sair', 'Deseja realmente sair da sua conta?', [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Sair', style: 'destructive',
+        onPress: async () => {
+          try {
+            await AsyncStorage.removeItem('slivi_token');
+            await AsyncStorage.removeItem('slivi_userId');
+            router.replace('/');
+          } catch (err) { console.error('Erro ao fazer logout:', err); }
+        },
+      },
+    ]);
+  }
+
+  // --- LÓGICA DE NOTIFICAÇÕES ---
+  async function handleOpenNotifications() {
+    setNotifModalVisible(true);
+    setHasUnread(false);
+    if (!token) return;
+    setLoadingNotifs(true);
+    try {
+      const data = await fetchNotifications(token);
+      setNotifications(data);
+    } catch (error) { console.log("Erro ao buscar notificações:", error); }
+    finally { setLoadingNotifs(false); }
+  }
+
+  const checkNotificationsStatus = async () => {
+    try {
+      const data = await fetchNotifications(token);
+      const hasNew = data.some(n => n.is_read === 0);
+      setHasUnread(hasNew);
+      setNotifications(data);
+    } catch (error) { console.log("Erro ao checar notificações:", error); }
+  };
+
+  // --- LÓGICA DE PROGRESSÃO
+  const triggerXpBarAnimation = (oldXp: number, newXp: number) => {
+    setShowXpBar(true);
+    // Garante que a barra comece do valor antigo
+    xpProgress.setValue(oldXp);
+    console.log("log da animação: ", oldXp);
+
+    Animated.sequence([
+      Animated.timing(xpBarOpacity, { toValue: 1, duration: 400, useNativeDriver: false }),
+      Animated.timing(xpProgress, { toValue: newXp, duration: 1500, useNativeDriver: false }),
+      Animated.delay(2000),
+      Animated.timing(xpBarOpacity, { toValue: 0, duration: 400, useNativeDriver: false })
+    ]).start(() => {
+      setShowXpBar(false);
+    });
+  };
+
+  // --- LÓGICA DE VESTIR ---
   const handleSelectClothing = async (clothingItem: any, category: string) => {
     setClothesModalVisible(false);
 
@@ -534,47 +881,6 @@ export default function HomeScreen() {
 
   };
 
-  async function handleLogout() {
-    Alert.alert('Sair', 'Deseja realmente sair da sua conta?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Sair', style: 'destructive',
-        onPress: async () => {
-          try {
-            await AsyncStorage.removeItem('slivi_token');
-            await AsyncStorage.removeItem('slivi_userId');
-            router.replace('/');
-          } catch (err) { console.error('Erro ao fazer logout:', err); }
-        },
-      },
-    ]);
-  }
-
-  async function handleOpenNotifications() {
-    setNotifModalVisible(true);
-    setHasUnread(false);
-    if (!token) return;
-    setLoadingNotifs(true);
-    try {
-      const data = await fetchNotifications(token);
-      setNotifications(data);
-    } catch (error) { console.log("Erro ao buscar notificações:", error); }
-    finally { setLoadingNotifs(false); }
-  }
-
-  const checkNotificationsStatus = async () => {
-    try {
-      const data = await fetchNotifications(token);
-      const hasNew = data.some(n => n.is_read === 0);
-      setHasUnread(hasNew);
-      setNotifications(data);
-    } catch (error) { console.log("Erro ao checar notificações:", error); }
-  };
-
-
-
-  const currentBgImage = WEATHER_IMAGES[weather.condition] || WEATHER_IMAGES.sun;
-
   // Pega os caminhos (ex: "/pants/...") do estado sliviClothing 
   // e busca a imagem correspondente no nosso dicionário CLOTHES_IMAGES.
   const resolvedClothingItems = sliviClothing
@@ -582,6 +888,9 @@ export default function HomeScreen() {
       .map(path => CLOTHES_IMAGES[path]) // Troca o texto pelo require da imagem
       .filter(Boolean) // Remove itens que retornem 'undefined' (caso a API mande uma roupa que você ainda não mapeou)
     : []; // Se sliviClothing for null, retorna um array vazio
+
+  const currentBgImage = WEATHER_IMAGES[weather.condition] || WEATHER_IMAGES.sun;
+
 
   return (
     <View style={styles.roomWall}>
@@ -624,14 +933,32 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      <View style={styles.progressBarArea}>
+        {showXpBar && xpData && (
+          <Animated.View style={[styles.xpBarContainer, { opacity: xpBarOpacity }]}>
+            <View style={styles.headerProgress}>
+              <Text style={styles.xpLevelText}>Nível {xpData.currentLevel}</Text>
+              <Text style={styles.xpTextValue}>
+                {xpData.currentXP} / {xpData.next_level_xp} XP
+              </Text>
+            </View>
+            <View style={styles.xpBarBackground}>
+              <Animated.View style={[styles.xpBarFill, { width: progressWidth }]} />
+            </View>
+          </Animated.View>
+        )}
+      </View>
+
       {/* --- CORPO (CENTRO) --- */}
       <View style={styles.windowWrapper}>
         <Image source={currentBgImage} style={styles.skyBackground} resizeMode='stretch' />
         <AirTrafficAnimation />
-        <WindowCleanerAnimation
-          weatherCondition={weather.condition}
-          windowSize={WINDOW_SIZE}
-        />
+        {weather.is_day == true && weather.condition === 'sun' && (
+          <WindowCleanerAnimation
+            weatherCondition={weather.condition}
+            windowSize={WINDOW_SIZE}
+          />
+        )}
         {weather.condition === 'rain' && (
           <View style={styles.weatherLayer}>
             <RainAnimation />
@@ -654,6 +981,20 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {showFloatingText && currentFoodHunger !== null && (
+          <Animated.View
+            style={[
+              styles.floatingTextContainer,
+              {
+                transform: [{ translateY: floatAnim }],
+                opacity: opacityAnim,
+              }
+            ]}
+          >
+            <Text style={styles.floatingText}>+{currentFoodHunger} XP!</Text>
+          </Animated.View>
+        )}
+
         {/* Sombreamento abaixo do Slivi */}
         <View style={styles.sliviShadow} />
 
@@ -667,9 +1008,27 @@ export default function HomeScreen() {
         />
 
         {foodVisible && currentSprites.length > 0 && (
-          <TouchableOpacity onPress={handleEat} style={styles.foodTouch} disabled={isAnimating}>
-            <Image source={currentSprites[foodStage]} style={styles.foodImg} resizeMode="contain" />
-          </TouchableOpacity>
+          <Animated.Image
+            source={currentSprites[foodStage]}
+            style={[
+              styles.plate,
+              {
+                opacity: plateOpacity, // Controla aparecer/desaparecer
+                // Aplica as transformações de Posição (X,Y) e Rotação
+                transform: [
+                  ...platePan.getTranslateTransform(),
+                  {
+                    // Interpola o valor de rotação de número para "graus" (string)
+                    rotate: plateRotation.interpolate({
+                      inputRange: [0, 90], // Recebe de 0 a 90 (definido no handleEat)
+                      outputRange: ['0deg', '90deg'], // Converte para rotação CSS
+                    }),
+                  },
+                ],
+              },
+            ]}
+            resizeMode="contain"
+          />
         )}
       </View>
 
@@ -700,9 +1059,10 @@ export default function HomeScreen() {
             <View style={styles.dropdownMenu}>
               <TouchableOpacity style={styles.dropdownItem}
                 onPress={() => {
+                  const clothingPaths = sliviClothing ? Object.values(sliviClothing) : [];
                   router.push({
                     pathname: './games/SliviPulse',
-                    params: { emotion: emotion }
+                    params: { emotion: emotion, clothing: JSON.stringify(clothingPaths) }
                   })
                 }}>
                 <Text style={{ textAlign: 'center', color: '#000', fontWeight: '800' }}>Slivi Pulse</Text>
@@ -710,9 +1070,10 @@ export default function HomeScreen() {
 
               <TouchableOpacity style={styles.dropdownItem}
                 onPress={() => {
+                  const clothingPaths = sliviClothing ? Object.values(sliviClothing) : [];
                   router.push({
                     pathname: './games/SliviMaestro',
-                    params: { emotion: emotion }
+                    params: { emotion: emotion, clothing: JSON.stringify(clothingPaths) }
                   })
                 }}>
                 <Text style={{ textAlign: 'center', color: '#000', fontWeight: '800' }}>Slivi River</Text>
@@ -766,7 +1127,11 @@ export default function HomeScreen() {
       </View>
 
 
-      <FoodModal visible={foodModalVisible} onClose={() => setFoodModalVisible(false)} onSelectFood={(food) => startEatingAnimation(food)} />
+      <FoodModal
+        visible={foodModalVisible}
+        onClose={() => setFoodModalVisible(false)}
+        onSelectFood={processFeeding}
+      />
       <ClothesModal visible={clothesModalVisible} onClose={() => setClothesModalVisible(false)} onSelectClothes={handleSelectClothing} />
       {sliviStates && <StatesModal visible={statesModalVisible} onClose={() => setStatesModalVisible(false)} states={sliviStates} emotion={emotion} />}
       <Notification visible={notifModalVisible} onClose={() => setNotifModalVisible(false)} notifications={notifications} loading={loadingNotifs} />
@@ -777,16 +1142,16 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   roomWall: {
     flex: 1,
-    backgroundColor: "#EBE3CD", // Bege mais suave do mockup
+    backgroundColor: "#EBE3CD",
     alignItems: 'center',
     justifyContent: 'flex-start',
     width: '100%',
     height: '100%',
   },
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject, // Cobre a tela inteira
-    backgroundColor: '#EBE3CD', // Mesma cor de fundo da sua Home
-    zIndex: 9999, // Fica por cima de TUDO
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#EBE3CD',
+    zIndex: 9999,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -801,9 +1166,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'black', opacity: 0.65, zIndex: 20
   },
 
-  // --- HEADER STYLES ---
   headerComponent: {
-    marginTop: 50, // Afasta do topo da tela (Status Bar)
+    marginTop: 50,
     width: '90%',
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -815,7 +1179,7 @@ const styles = StyleSheet.create({
   },
   rightHeader: {
     flexDirection: 'row',
-    gap: 10, // Espaçamento entre os ícones da direita
+    gap: 10,
   },
   iconButton: {
     backgroundColor: 'transparent',
@@ -832,19 +1196,75 @@ const styles = StyleSheet.create({
     borderRadius: 6, backgroundColor: 'red', borderWidth: 2, borderColor: '#EBE3CD',
   },
 
+  // --- PROGRESS BAR AREA ---
+  progressBarArea: {
+    display: 'flex',
+    minWidth: '100%',
+    maxWidth: '100%',
+    height: 30,
+  },
+
+  headerProgress: {
+    display: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+
+  // --- XP BAR STYLES ---
+  xpBarContainer: {
+    position: 'absolute',
+    left: '15%',
+    width: '75%',
+    paddingVertical: 10,
+    zIndex: 200,
+    alignItems: 'center'
+  },
+  xpLevelText: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#000',
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  xpBarBackground: {
+    width: '100%',
+    height: 18,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#ffd700',
+  },
+  xpBarFill: {
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#ffeb3b',
+  },
+  xpTextValue: {
+    fontSize: 18,
+    paddingHorizontal: 1,
+    fontWeight: 'bold',
+    color: '#000',
+    alignSelf: 'center',
+  },
+
+
   // --- WINDOW & SLIVI STYLES ---
   windowWrapper: {
     width: WINDOW_SIZE, height: WINDOW_SIZE,
-    marginTop: 40, // Espaço entre o header e a janela
+    marginTop: 40,
     overflow: 'hidden',
     zIndex: 1,
-    borderRadius: 20, // Cantos arredondados na janela
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#000', // Moldura preta sólida
+    borderColor: '#000',
   },
   skyBackground: { width: '100%', height: '100%', position: 'absolute' },
   weatherLayer: { ...StyleSheet.absoluteFillObject, zIndex: 1, opacity: 0.8 },
-  windowFrameImage: { position: 'relative', width: '100%', height: '100%', zIndex: 10, opacity: 1 }, // Opacidade 0 caso a moldura real atrapalhe a borda preta sólida, ajuste se necessário
+  windowFrameImage: { position: 'relative', width: '100%', height: '100%', zIndex: 10, opacity: 1 },
 
   sliviArea: {
     flex: 1,
@@ -852,15 +1272,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    marginTop: -20, // Puxa o Slivi um pouco para cima sobrepondo a janela
+    marginTop: -20,
   },
+
+  floatingTextContainer: {
+    position: 'absolute',
+    top: '35%',
+    right: '25%',
+    zIndex: 150,
+  },
+  floatingText: {
+    fontSize: 36,
+    fontWeight: '900',
+    color: '#4AFF88',
+    textShadowColor: 'rgba(0,0,0,0.6)',
+    textShadowOffset: { width: 2, height: 3 },
+    textShadowRadius: 4,
+    textTransform: 'uppercase',
+  },
+
+
   sliviShadow: {
     position: 'absolute',
     bottom: -400,
     width: '100%',
     height: 700,
     backgroundColor: 'rgba(0,0,0,0.15)',
-    transform: [{ scaleY: 0.5 }], // Achata a bolinha para virar sombra
+    transform: [{ scaleY: 0.5 }],
   },
 
   // --- SPEECH BUBBLE ---
@@ -904,6 +1342,17 @@ const styles = StyleSheet.create({
   foodTouch: { position: 'absolute', right: 100, zIndex: 20, bottom: 110, backgroundColor: 'transparent' },
   foodImg: { width: 140, height: 140, zIndex: 20 },
 
+  plate: {
+    position: 'absolute',
+    width: 140, // Tamanho do prato
+    height: 140,
+    zIndex: 150,
+    bottom: '75%',
+    left: '40%',
+    marginTop: -70, // Metade da altura para centralizar ponto de origem
+    marginLeft: -70, // Metade da largura
+  },
+
   // --- BOTTOM NAV BAR STYLES ---
   bottomNavBar: {
     width: '90%',
@@ -926,7 +1375,7 @@ const styles = StyleSheet.create({
   },
   dropdownMenu: {
     position: 'absolute',
-    bottom: 80, // 🔥 altura do botão (70) + margem
+    bottom: 80,
     alignItems: 'center',
     gap: 5,
   },

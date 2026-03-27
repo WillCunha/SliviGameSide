@@ -22,4 +22,16 @@ export const FOOD_IMAGES = {
     require("../../../assets/images/food/apple-01.png"),
     require("../../../assets/images/food/apple-02.png"),
   ],
+  alface: [
+    require("../../../assets/images/food/alface_00.png")
+  ],
+  ovo: [
+    require("../../../assets/images/food/ovo_00.png")
+  ],
+  manteiga: [
+    require("../../../assets/images/food/manteiga_00.png")
+  ],
+  pao: [
+    require("../../../assets/images/food/pao_00.png")
+  ],
 };
