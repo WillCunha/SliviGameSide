@@ -4,7 +4,7 @@ import { apiRequest } from "../api/client";
 export async function fetchFoods() {
   const token = await AsyncStorage.getItem("slivi_token");
 
-  return apiRequest<any[]>("slivi/foods", {
+  return apiRequest<any[]>("slivi/fridge", {
     method: "GET",
     headers: {
       Authorization: `Bearer ${token}`,

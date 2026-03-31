@@ -38,7 +38,7 @@ export async function syncUserLocation(userId: number): Promise<WeatherState | n
     });
 
     const json = await response.json();
-    console.log(json.data.weather);
+    // console.log(json.data.weather);
     if (json.success) {
       return json.data.weather; // Retorna o objeto { temp, condition, is_day, hour }
     } else {

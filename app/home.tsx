@@ -1,4 +1,5 @@
 import { Audio } from 'expo-av';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,12 +12,12 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
+import ConfettiCannon from 'react-native-confetti-cannon';
 
 // --- IMPORTS DOS COMPONENTES ---
 import RainAnimation from '@/components/RainAnimation';
 import Slivi from '@/components/slivi';
 import FoodModal from '@/src/components/foods/foodModal';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 // --- IMPORTS DE SERVIÇOS E DADOS ---
 import AirTrafficAnimation from '@/components/AirTrafficAnimation';
@@ -24,9 +25,11 @@ import ClothesModal from '@/components/Modal/Clothes';
 import Notification from '@/components/Modal/Notification';
 import StatesModal from '@/components/Modal/States';
 import WindowCleanerAnimation from '@/components/WindowCleanerAnimation';
+import ZzzAnimation from '@/components/ZzzAnimation';
 import { syncUserLocation, WeatherState } from '@/src/api/weatherClient';
 import { CITY_SOUNDS } from '@/src/components/city/city';
 import { CLOTHES_IMAGES } from '@/src/components/clothes/clothesMap';
+import { REWARDS_IMAGES } from '@/src/components/rewards/rewardsMap';
 import { LOCAL_ASSETS } from '@/src/components/slivi/speechMap';
 import { dressService } from '@/src/services/dressService';
 import { feedSlivi } from '@/src/services/feedService';
@@ -91,6 +94,7 @@ export default function HomeScreen() {
 
   // --- ESTADOS DO JOGO ---
   const [emotion, setEmotion] = useState<Emotion>('NEUTRO');
+  const [money, setMoney] = useState(parsedSliviState ? parsedSliviState.wallet : null);
   const [loading, setLoading] = useState(true);
   const [loadingMsg, setLoadingMsg] = useState("");
 
@@ -112,7 +116,6 @@ export default function HomeScreen() {
 
   // --- ESTADOS DA ANIMAÇÃO E COMIDA ---
   const [currentPlateFoods, setCurrentPlateFoods] = useState<any[]>([]);
-  const platePan = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const plateRotation = useRef(new Animated.Value(0)).current;
   const plateOpacity = useRef(new Animated.Value(0)).current;
   const [plateColor, setPlateColor] = useState<'RED' | 'GREEN' | null>(null);
@@ -123,6 +126,9 @@ export default function HomeScreen() {
   const [foodModalVisible, setFoodModalVisible] = useState(false);
   const currentSprites = plateColor ? PLATE_IMAGES[plateColor] : [];
 
+  // --- ESTADOS DE RECOMPENSA (COMBO) ---
+  const [rewardWord, setRewardWord] = useState<string | null>(null);
+  const rewardScale = useRef(new Animated.Value(0)).current;
 
   // --- TEXTO FLUTUANTE ---
   const [currentFoodHunger, setCurrentFoodHunger] = useState<number | null>(null);
@@ -160,6 +166,12 @@ export default function HomeScreen() {
   const xpBarOpacity = useRef(new Animated.Value(0)).current;
   const xpProgress = useRef(new Animated.Value(parsedSliviState?.xpLevel?.currentXP || 0)).current;
 
+  // --- ESTADOS DE MUDANÇA DE HUMOR ---
+  const prevEmotionRef = useRef<Emotion | null>(null);
+  const moodTranslateY = useRef(new Animated.Value(0)).current;
+  const [visualEmotion, setVisualEmotion] = useState<Emotion>(emotion);
+  const moodSoundRef = useRef<Audio.Sound | null>(null);
+
   // Função para interpolar o valor de XP em Porcentagem (0% a 100%)
   const progressWidth = xpProgress.interpolate({
     inputRange: [0, xpData?.next_level_xp || 1], // Evita travar caso o next_level venha zerado
@@ -179,6 +191,7 @@ export default function HomeScreen() {
 
         // 1. Bloqueia a tela imediatamente ao voltar para a Home
         setLoading(true);
+        console.log("sleep? ", sleepState)
 
         try {
           // 2. Chama a API da Hostinger
@@ -213,16 +226,19 @@ export default function HomeScreen() {
   }, [sound]);
 
 
+  // Controla o tempo de atualização de dados.
   useEffect(() => {
     loadGameData();
     const intervalId = setInterval(() => { loadState(); }, 60000);
     return () => clearInterval(intervalId);
   }, [token]);
 
+  // Checa as notificações
   useEffect(() => {
     if (token) checkNotificationsStatus();
   }, [token]);
 
+  // Controla e dispara as falas
   useEffect(() => {
 
     scheduleNextSpeech();
@@ -234,6 +250,7 @@ export default function HomeScreen() {
     };
   }, []);
 
+  // Verifica se o usuario que chegou na tela veio de 'Register'
   useEffect(() => {
     if (!loading && isNewUser) {
       const welcomeTimer = setTimeout(() => {
@@ -244,6 +261,7 @@ export default function HomeScreen() {
     }
   }, [loading, isNewUser]);
 
+  // Controla os sons ambiente. 
   useEffect(() => {
     let currentAmbientSound: Audio.Sound | null = null;
     let isActive = true;
@@ -343,24 +361,26 @@ export default function HomeScreen() {
           const randomAudio = categoryData.audios[Math.floor(Math.random() * categoryData.audios.length)];
 
           try {
-            const { sound: sfxSound } = await Audio.Sound.createAsync(randomAudio, { shouldPlay: true, volume: 0.4 });
-            // Descarrega o SFX da memória assim que ele terminar de tocar
-            sfxSound.setOnPlaybackStatusUpdate((status: any) => {
-              if (status.didJustFinish) {
-                sfxSound.unloadAsync();
+            const { sound: sfxSound } = await Audio.Sound.createAsync(
+              randomAudio,
+              { shouldPlay: true, volume: 0.1 }
+            );
+
+            sfxSound.setOnPlaybackStatusUpdate(async (status) => {
+              if (status.isLoaded && status.didJustFinish) {
+                await sfxSound.unloadAsync();
               }
             });
           } catch (error) {
-            console.error(`Erro ao tocar SFX (${randomCategory}):`, error);
+            console.error(`Erro ao tocar SFX:`, error);
           }
         }
 
-        // Agenda o próximo som independentemente de sucesso/falha
+
         scheduleNextSFX();
       }, delay);
     }
 
-    // Inicia o áudio base e o agendador de efeitos
     setupBaseAudio();
     scheduleNextSFX();
 
@@ -376,6 +396,16 @@ export default function HomeScreen() {
     };
   }, [weather.condition]); // Reexecuta se o clima mudar 
 
+  // Verifica o status 'emotion' que vem da API
+  useEffect(() => {
+    if (prevEmotionRef.current && prevEmotionRef.current !== emotion) {
+      if (!isSleepingRef.current) {
+        triggerMoodChange(emotion); // Passa a nova emoção para a função
+      }
+    }
+    prevEmotionRef.current = emotion;
+  }, [emotion]);
+
 
   // --- CHAMA AS FUNÇÕES DE ATUALIZAÇÃO DE DADOS ---
   async function loadGameData() {
@@ -384,18 +414,14 @@ export default function HomeScreen() {
     await loadWeather();
     setLoading(false);
   }
-  
-  // --- CARREGA DADOS DO TEMPO NO LOCAL ---
-  async function loadWeather() {
-    const weatherData = await syncUserLocation(userId || 1);
-    if (weatherData) setWeather(weatherData);
-  }
-  
+
   // --- CARREGA DADOS DO GAME ---
   async function loadState(): Promise<any> {
     if (!token) return;
     try {
       const state = await fetchSliviState(token);
+      console.log(displayEmotion)
+
 
       if (!state) {
         console.log("caiu aqui: fetchSliviState não retornou dados!")
@@ -431,7 +457,6 @@ export default function HomeScreen() {
         }
       }
 
-      console.log("Tudo certo no loadState, retornando: ", state)
       return state;
     } catch (err: any) {
       console.log("Erro ao carregar estado: ", err.message);
@@ -440,7 +465,13 @@ export default function HomeScreen() {
     }
   }
 
-  // --- LÓGICA DE FALA ---
+  // --- CARREGA DADOS DO TEMPO NO LOCAL ---
+  async function loadWeather() {
+    const weatherData = await syncUserLocation(userId || 1);
+    if (weatherData) setWeather(weatherData);
+  }
+
+  // --- SEQUÊNCIA DE LÓGICAS DE FALA ---
   function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
@@ -456,7 +487,7 @@ export default function HomeScreen() {
     const min = 40000;
     const max = 120000;
     const randomDelay = Math.floor(Math.random() * (max - min)) + min;
-    console.log("tempo: ", randomDelay);
+    //console.log("tempo: ", randomDelay);
 
 
     speechTimeoutRef.current = setTimeout(() => {
@@ -680,6 +711,42 @@ export default function HomeScreen() {
     }
   };
 
+  // --- LÓGICA DE RECOMPENSA POR ALIMENTAR-SE
+  const triggerRewardAnimation = async (word: string) => {
+    try {
+      const { sound: rewardSound } = await Audio.Sound.createAsync(
+        require('@/assets/audios/effects/conquista/epic_food_reward_02.mp3'),
+        { shouldPlay: true, volume: 1.0 }
+      );
+      rewardSound.setOnPlaybackStatusUpdate((status: any) => {
+        if (status.didJustFinish) rewardSound.unloadAsync();
+      });
+    } catch (err) {
+      console.log("Erro ao tocar som de recompensa:", err);
+    }
+
+    setRewardWord(word.toUpperCase());
+
+    Animated.spring(rewardScale, {
+      toValue: 1,
+      friction: 3,
+      tension: 40,
+      useNativeDriver: true,
+    }).start();
+
+    await wait(2500);
+
+    Animated.timing(rewardScale, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setRewardWord(null);
+      handleSliviSpeech('fimComer', true);
+    });
+  };
+
+
   // --- LÓGICA DE ALIMENTAR-SE  ---
   const processFeeding = async (foodsArray: any[]) => {
     if (isAnimating || isSpeaking || !foodsArray || foodsArray.length === 0) {
@@ -752,9 +819,18 @@ export default function HomeScreen() {
 
     try {
       const previousXp = xpData?.currentXP || 0;
+      let obtainedCombo: string | null = null;
 
-      for (const food of foodsArray) {
-        await feedSlivi(food.id);
+      const idsToSend = foodsArray.map(food => food.id);
+      console.log("Enviando array de IDs para a API: ", idsToSend);
+
+      // 2. Fazemos apenas UMA requisição enviando o array [id, id, id]
+      const response = await feedSlivi(idsToSend);
+      console.log("RESPOSTA ", response);
+
+      // 3. Verificamos se a refeição gerou um combo
+      if (response && response.combo_word) {
+        obtainedCombo = response.combo_word;
       }
 
       const newState = await loadState();
@@ -764,10 +840,21 @@ export default function HomeScreen() {
           triggerXpBarAnimation(previousXp, newXp);
         }
       }
-      handleSliviSpeech('fimComer', true);
+
       triggerFloatingText();
+
+      // Controle da fala e recompensa
+      if (obtainedCombo) {
+        // Se teve combo, a animação assume o controle e o Slivi só fala no final dela
+        triggerRewardAnimation(obtainedCombo);
+      } else {
+        // Se não teve combo, o Slivi fala normalmente
+        handleSliviSpeech('fimComer', true);
+      }
+
     } catch (error) {
       Alert.alert("Erro", "Não foi possível computar a alimentação.");
+      console.error(error);
     }
 
     // Limpeza
@@ -775,6 +862,7 @@ export default function HomeScreen() {
     setCurrentPlateFoods([]);
     setIsAnimating(false);
   };
+
 
   // --- TEXTO DE PONTUAÇÃO FLUTUANTE ---
   const triggerFloatingText = () => {
@@ -881,6 +969,49 @@ export default function HomeScreen() {
 
   };
 
+  // --- LÓGICA DE ANIMAÇÃO DE TROCA DE PERSONAGEM BASEADA NO HUMOR ---
+  const triggerMoodChange = async (newEmotion: Emotion) => {
+    try {
+      // Criamos o som do zero SEMPRE. 
+      // Usar o require direto aqui força o Expo a verificar o asset novamente.
+      const { sound: moodSound } = await Audio.Sound.createAsync(
+        require('@/assets/audios/effects/mood_change_positive.mp3'),
+        { shouldPlay: true, volume: 0.8 }
+      );
+
+      // Configuramos para ele se auto-destruir assim que terminar
+      moodSound.setOnPlaybackStatusUpdate(async (status) => {
+        if (status.isLoaded && status.didJustFinish) {
+          await moodSound.unloadAsync();
+        }
+      });
+    } catch (err) {
+      // Se o Android der erro de arquivo, o jogo não trava
+      console.log("Erro ao carregar áudio de humor (recuperando...):", err);
+    }
+    Animated.timing(moodTranslateY, {
+      toValue: 600,
+      duration: 250,
+      useNativeDriver: true,
+    }).start(() => {
+      setVisualEmotion(newEmotion);
+
+      Animated.spring(moodTranslateY, {
+        toValue: 0,
+        friction: 5,
+        tension: 50,
+        useNativeDriver: true,
+      }).start();
+    });
+  };
+
+  const formatMoney = (value: number) => {
+    return (value / 100)
+      .toFixed(2) // Garante 2 casas decimais
+      .replace('.', ',') // Troca o ponto da casa decimal por vírgula
+      .replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.'); // Adiciona os pontos de milhar
+  };
+
   // Pega os caminhos (ex: "/pants/...") do estado sliviClothing 
   // e busca a imagem correspondente no nosso dicionário CLOTHES_IMAGES.
   const resolvedClothingItems = sliviClothing
@@ -912,6 +1043,17 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.rightHeader}>
+          <View style={[styles.iconButton, { display: 'flex', flexDirection: 'row', justifyContent: 'space-between' }]}>
+            <Image source={require('@/assets/images/components/s-coins_logo.png')} resizeMode='contain' style={{ width: 32, height: 32 }} />
+            <Text style={styles.txtMoney}>{formatMoney(money)}</Text>
+          </View>
+          {/* <TouchableOpacity onPress={loadGameData} style={styles.iconButton}>
+            <Ionicons
+              name="refresh-circle-outline"
+              size={26}
+              color="#000"
+            />
+          </TouchableOpacity> */}
           <TouchableOpacity onPress={toggleLight} style={styles.iconButton}>
             <Ionicons
               name={isLightOn ? "bulb" : "bulb-outline"}
@@ -949,7 +1091,7 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {/* --- CORPO (CENTRO) --- */}
+      {/* --- (CENTRO) --- */}
       <View style={styles.windowWrapper}>
         <Image source={currentBgImage} style={styles.skyBackground} resizeMode='stretch' />
         <AirTrafficAnimation />
@@ -998,14 +1140,27 @@ export default function HomeScreen() {
         {/* Sombreamento abaixo do Slivi */}
         <View style={styles.sliviShadow} />
 
-        <Slivi
-          scale={1}
-          size={600}
-          emotion={emotion}
-          eyeEmotion={sleepState}
-          mouthOverride={mouthOverride}
-          clothingItems={resolvedClothingItems}
-        />
+        <ZzzAnimation isSleeping={sleepState === 'DORMINDO'} />
+        <View style={{
+          width: 600,
+          height: 600, // Mesmas dimensões do Slivi
+          overflow: 'hidden', // ISSO AQUI FAZ A MÁGICA DE ESCONDER ELE
+          justifyContent: 'flex-end',
+          zIndex: 10
+        }}>
+          <Animated.View style={{
+            transform: [{ translateY: moodTranslateY }]
+          }}>
+            <Slivi
+              scale={1}
+              size={600}
+              emotion={visualEmotion}
+              eyeEmotion={displayEmotion === 'DORMINDO' ? visualEmotion : sleepState}
+              mouthOverride={mouthOverride}
+              clothingItems={resolvedClothingItems}
+            />
+          </Animated.View>
+        </View>
 
         {foodVisible && currentSprites.length > 0 && (
           <Animated.Image
@@ -1016,7 +1171,6 @@ export default function HomeScreen() {
                 opacity: plateOpacity, // Controla aparecer/desaparecer
                 // Aplica as transformações de Posição (X,Y) e Rotação
                 transform: [
-                  ...platePan.getTranslateTransform(),
                   {
                     // Interpola o valor de rotação de número para "graus" (string)
                     rotate: plateRotation.interpolate({
@@ -1118,11 +1272,14 @@ export default function HomeScreen() {
         {/* Botão Chat (Teste de Fala) */}
         <TouchableOpacity onPress={() => {
           if (isLightOn) {
-            handleSliviSpeech("Teste de fala do Slivi!")
+            router.push({
+              pathname: "/store/Market",
+              params: { money: money } // Enviamos o ID para a nova tela
+            });
           }
         }
         } style={styles.bottomNavIcon}>
-          <Ionicons name="chatbubble-ellipses" size={32} color="#000" />
+          <Ionicons name='storefront' size={32} color="#000" />
         </TouchableOpacity>
       </View>
 
@@ -1135,6 +1292,28 @@ export default function HomeScreen() {
       <ClothesModal visible={clothesModalVisible} onClose={() => setClothesModalVisible(false)} onSelectClothes={handleSelectClothing} />
       {sliviStates && <StatesModal visible={statesModalVisible} onClose={() => setStatesModalVisible(false)} states={sliviStates} emotion={emotion} />}
       <Notification visible={notifModalVisible} onClose={() => setNotifModalVisible(false)} notifications={notifications} loading={loadingNotifs} />
+
+      {rewardWord && (
+        <View style={styles.rewardOverlay}>
+          <ConfettiCannon
+            count={200}
+            origin={{ x: -10, y: 0 }}
+            autoStart={true}
+            fadeOut={true}
+            fallSpeed={2500}
+            explosionSpeed={350}
+          // colors={['#ff0', '#f0f', '#0ff', '#f00', '#0f0']} 
+          />
+          <Animated.Image
+            source={(REWARDS_IMAGES as any)[rewardWord]}
+            style={[
+              styles.rewardImage,
+              { transform: [{ scale: rewardScale }] }
+            ]}
+            resizeMode="contain"
+          />
+        </View>
+      )}
     </View >
   );
 }
@@ -1179,7 +1358,13 @@ const styles = StyleSheet.create({
   },
   rightHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 10,
+  },
+  txtMoney: {
+    fontWeight: '800',
+    fontSize: 12,
   },
   iconButton: {
     backgroundColor: 'transparent',
@@ -1189,11 +1374,25 @@ const styles = StyleSheet.create({
     padding: 8,
     alignItems: 'center',
     justifyContent: 'center',
+
   },
   notificationBtn: { position: 'relative' },
   badgeDot: {
     position: 'absolute', top: -4, right: -4, width: 12, height: 12,
     borderRadius: 6, backgroundColor: 'red', borderWidth: 2, borderColor: '#EBE3CD',
+  },
+
+  // --- REWARD STYLES ---
+  rewardOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.85)', // Fundo escuro cobrindo tudo
+    zIndex: 99999, // Z-index altíssimo para ficar acima de TODOS os componentes
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  rewardImage: {
+    width: '100%',
+    height: 250,
   },
 
   // --- PROGRESS BAR AREA ---

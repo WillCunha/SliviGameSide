@@ -37,8 +37,8 @@ const MAX_LIVES = 5;        // ❤️ Máximo de corações
 /* =====================
    TIPOS E HELPER
 ===================== */
-type ItemCategory = 'POSITIVE' | 'NEGATIVE';
-type ItemSubType = 'ORVALHO' | 'ESTRELA' | 'FRUTA' | 'LAMA' | 'TEMPESTADE' | 'ESPINHO';
+type ItemCategory = 'POSITIVE' | 'NEGATIVE' | 'COIN';
+type ItemSubType = 'ORVALHO' | 'ESTRELA' | 'FRUTA' | 'LAMA' | 'TEMPESTADE' | 'ESPINHO' | 'MOEDA';
 
 interface GameItem {
     id: number;
@@ -115,9 +115,10 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
     const [isTurbulence, setIsTurbulence] = useState(false);
     const [riverSpeed, setRiverSpeed] = useState(1.0);
 
+    const [collectedCoins, setCollectedCoins] = useState(0);
+
     const [objectives, setObjectives] = useState<GameObjective[]>([]);
 
-    // Musica
     // Musica
     const [bgMusic, setBgMusic] = useState<Audio.Sound | null>(null);
 
@@ -171,6 +172,7 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
                     stats: {
                         score: score,
                         ...stats,
+                        collected_coins: collectedCoins,
                         run_duration: duration,
                     },
                 }
@@ -186,6 +188,7 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
                         total_navigation_time: duration,
                         score: score,
                         ...stats,
+                        collected_coins: collectedCoins,
                         run_duration: duration,
                     },
                 });
@@ -293,6 +296,15 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
        COLISÃO E EFEITOS
     ===================== */
     function processItemEffect(item: GameItem, collided: boolean) {
+
+        // --- LÓGICA DA MOEDA ---
+        if (item.category === 'COIN') {
+            if (collided) {
+                const coinValue = Math.floor(Math.random() * 5) + 1;
+                setCollectedCoins(c => c + coinValue);
+            }
+            return;
+        }
 
         if (item.category === 'POSITIVE') {
             if (collided) {
@@ -409,17 +421,25 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
             let cat: ItemCategory = 'POSITIVE';
             let sub: ItemSubType = 'ORVALHO';
 
-            if (rand < negativeChance) {
-                cat = 'NEGATIVE';
-                const subRand = Math.random();
-                if (subRand > 0.7) sub = 'ESPINHO';
-                else if (subRand > 0.4) sub = 'TEMPESTADE';
-                else sub = 'LAMA';
+            const coinRand = Math.random();
+
+            if (coinRand < 0.15) {
+                cat = 'COIN';
+                sub = 'MOEDA';
             } else {
-                const subRand = Math.random();
-                if (subRand < 0.15) sub = 'FRUTA';
-                else if (subRand < 0.3) sub = 'ESTRELA';
-                else sub = 'ORVALHO';
+                const gameRand = Math.random();
+                if (gameRand < negativeChance) {
+                    cat = 'NEGATIVE';
+                    const subRand = Math.random();
+                    if (subRand > 0.7) sub = 'ESPINHO';
+                    else if (subRand > 0.4) sub = 'TEMPESTADE';
+                    else sub = 'LAMA';
+                } else {
+                    const subRand = Math.random();
+                    if (subRand < 0.15) sub = 'FRUTA';
+                    else if (subRand < 0.3) sub = 'ESTRELA';
+                    else sub = 'ORVALHO';
+                }
             }
 
             setItems(prev => [...prev, {
@@ -449,6 +469,7 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
         setStarted(true);
         setGameOver(false);
         setScore(0);
+        setCollectedCoins(0);
         setCombo(1);
         setItems([]);
         setEnergy(MAX_ENERGY);
@@ -508,6 +529,7 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
                     total_navigation_time: duration,
                     score: score,
                     ...stats,
+                    collected_coins: collectedCoins,
                     run_duration: duration,
                 },
             });
@@ -554,6 +576,7 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
             case 'LAMA': return '#8B4513';
             case 'TEMPESTADE': return '#555';
             case 'ESPINHO': return '#ff0000';
+            case 'MOEDA': return '#f59e0b';
             default: return '#fff';
         }
     };
@@ -566,6 +589,7 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
             case 'LAMA': return '💩';
             case 'TEMPESTADE': return '⛈️';
             case 'ESPINHO': return '🌵';
+            case 'MOEDA': return '🪙';
             default: return '';
         }
     };
@@ -626,6 +650,9 @@ export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestro
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
                     <Text style={styles.scoreText}>{score}</Text>
+                    <Text style={{ color: '#f59e0b', fontSize: 18, fontWeight: 'bold', marginBottom: 4 }}>
+                        S-Coins: {collectedCoins}
+                    </Text>
                     {objectives.map(obj => {
                         const completed = isObjectiveComplete(obj);
                         return (

@@ -23,7 +23,7 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   // Agora vamos passar um array de alimentos para o Slivi
-  onSelectFood: (foods: any[]) => void; 
+  onSelectFood: (foods: any[]) => void;
 };
 
 // Componente interno para cada item arrastável
@@ -31,6 +31,7 @@ const DraggableFood = ({ item, onDropOnPlate }: { item: any, onDropOnPlate: (ite
   const pan = useRef(new Animated.ValueXY()).current;
   const sprites = FOOD_IMAGES[item.image_key as keyof typeof FOOD_IMAGES];
   const image = sprites?.[0];
+  const formattedQuantity = item.quantity < 10 ? `0${item.quantity}` : item.quantity;
 
   const panResponder = useRef(
     PanResponder.create({
@@ -44,7 +45,7 @@ const DraggableFood = ({ item, onDropOnPlate }: { item: any, onDropOnPlate: (ite
         if (gestureState.moveX > SCREEN_WIDTH / 2) {
           onDropOnPlate(item);
         }
-        
+
         // Faz a comida voltar pro lugar original na geladeira (suavemente)
         Animated.spring(pan, {
           toValue: { x: 0, y: 0 },
@@ -64,7 +65,11 @@ const DraggableFood = ({ item, onDropOnPlate }: { item: any, onDropOnPlate: (ite
     >
       {image && <Image source={image} style={styles.image} pointerEvents="none" />}
       <Text style={styles.name}>{item.name}</Text>
-      <Text style={styles.effect}>+{item.hunger} fome</Text>
+      <Text style={styles.quantity}>Disponível: {formattedQuantity}</Text>
+
+      <Text style={styles.effect}>+{item.hunger} Fome</Text>
+      <Text style={styles.effect}>+{item.energy} Energia</Text>
+      <Text style={styles.effect}>+{item.happiness} Felicidade</Text>
     </Animated.View>
   );
 };
@@ -93,18 +98,36 @@ export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
     }
   }
 
-  const handleDropOnPlate = (food: any) => {
-    setPlateItems((prev) => {
-      if (prev.length < 3) {
-        return [...prev, food];
-      }
-      // Se já tiver 3, não adiciona e avisa (opcional)
-      return prev;
-    });
+
+  const handleDropOnPlate = (droppedItem: any) => {
+
+    setPlateItems((prevPlate) => [...prevPlate, droppedItem]);
+
+
+    setFoods((prevFoods) =>
+      prevFoods.map((food) => {
+        if (food.id === droppedItem.id) {
+          return { ...food, quantity: food.quantity - 1 }; // Tira 1 do estoque local
+        }
+        return food;
+      })
+    );
   };
 
-  const removeFromPlate = (indexToRemove: number) => {
-    setPlateItems((prev) => prev.filter((_, index) => index !== indexToRemove));
+  const removeFromPlate = (indexToRemove: number, itemToRemove: any) => {
+    setPlateItems((prevPlate) => {
+      const newPlate = [...prevPlate];
+      newPlate.splice(indexToRemove, 1); 
+      return newPlate;
+    });
+    setFoods((prevFoods) =>
+      prevFoods.map((food) => {
+        if (food.id === itemToRemove.id) {
+          return { ...food, quantity: food.quantity + 1 };
+        }
+        return food;
+      })
+    );
   };
 
   const handleServe = () => {
@@ -121,23 +144,29 @@ export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
     <Modal visible={visible} animationType="slide" transparent>
       <View style={styles.overlay}>
         <View style={styles.container}>
-          
+
           <View style={styles.header}>
             <Text style={styles.title}>GELADEIRA</Text>
             <Text style={styles.subTitle}>Arraste até 3 itens para o prato</Text>
           </View>
 
           <View style={styles.splitArea}>
-            
+
             {/* LADO ESQUERDO: Geladeira / Inventário */}
             <View style={styles.leftSide}>
               {loading ? (
                 <ActivityIndicator size="large" color="#FF9800" />
               ) : (
                 <ScrollView contentContainerStyle={styles.fridgeContent}>
-                  {foods.map((item) => (
-                    <DraggableFood key={item.id} item={item} onDropOnPlate={handleDropOnPlate} />
-                  ))}
+                  {foods
+                    .filter((food) => food.quantity > 0) // O SEGREDO TÁ AQUI!
+                    .map((food) => (
+                      <DraggableFood
+                        key={food.id}
+                        item={food}
+                        onDropOnPlate={handleDropOnPlate}
+                      />
+                    ))}
                 </ScrollView>
               )}
             </View>
@@ -146,15 +175,15 @@ export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
             <View style={styles.rightSide}>
               <View style={styles.plateArea}>
                 <Text style={styles.plateText}>Prato ({plateItems.length}/3)</Text>
-                
+
                 {/* Visualização dos itens que estão no prato */}
                 <View style={styles.plate}>
                   {plateItems.map((item, index) => {
                     const sprites = FOOD_IMAGES[item.image_key as keyof typeof FOOD_IMAGES];
                     const image = sprites?.[0];
                     return (
-                      <TouchableOpacity key={`${item.id}-${index}`} onPress={() => removeFromPlate(index)}>
-                         <Image source={image} style={styles.plateFoodImage} />
+                      <TouchableOpacity key={`${item.id}-${index}`} onPress={() => removeFromPlate(index, item)}>
+                        <Image source={image} style={styles.plateFoodImage} />
                       </TouchableOpacity>
                     );
                   })}
@@ -165,8 +194,8 @@ export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
 
               </View>
 
-              <TouchableOpacity 
-                style={[styles.serveBtn, plateItems.length === 0 && styles.serveBtnDisabled]} 
+              <TouchableOpacity
+                style={[styles.serveBtn, plateItems.length === 0 && styles.serveBtnDisabled]}
                 onPress={handleServe}
               >
                 <Text style={styles.serveText}>Servir!</Text>
@@ -255,6 +284,14 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
   },
+  quantity: {
+    color: "#4AFF88",
+    fontSize: 10,
+    fontWeight: "bold",
+    marginTop: 2,
+    marginVertical: '5%',
+  },
+
   effect: {
     color: "#aaa",
     fontSize: 10,
@@ -309,7 +346,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   closeBtn: {
-    backgroundColor: "#333",
+    backgroundColor: "#FF9800",
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: "center",

@@ -1,8 +1,8 @@
 import { syncUserLocation } from '@/src/api/weatherClient';
-import { updateDeviceToken } from '@/src/services/authService'; // <--- IMPORTANTE: ajuste o caminho se necessário
+import { updateDeviceToken } from '@/src/services/authService';
 import { fetchSliviState } from '@/src/services/sliviService';
 import Constants from 'expo-constants';
-import * as Notifications from 'expo-notifications'; // <--- IMPORTANTE
+import * as Notifications from 'expo-notifications';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -81,7 +81,7 @@ export default function LoadingScreen() {
                 const stateString = JSON.stringify(sliviState);
                 const weatherString = JSON.stringify(weatherData);
 
-                console.log(stateString);
+                // console.log(stateString);
 
                 // 4. Tudo pronto! Envia para a Home com os dados já carregados
                 router.replace({
