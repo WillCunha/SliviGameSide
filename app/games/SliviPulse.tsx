@@ -346,7 +346,7 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
     if (!started || gameOver) return;
 
     const diffTimer = setInterval(() => {
-      setSpeed(s => Math.min(s + 0.4, 15));
+      setSpeed(s => Math.min(s + 0.2, 15));
       setDifficultyLevel(d => d + 1);
     }, 5000);
 

@@ -19,14 +19,22 @@ import { FOOD_IMAGES } from "./foodMap";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
+// Dicionário para títulos bonitos na geladeira
+const CATEGORY_LABELS: Record<string, string> = {
+    VERDURAS: '🥗 Verduras',
+    CARNES: '🥩 Carnes',
+    FRUTAS: '🍎 Frutas',
+    MASSA: '🥖 Massas & Pães',
+    OVOS: '🥚 Ovos',
+    LATICINIOS: '🥛 Laticínios',
+};
+
 type Props = {
   visible: boolean;
   onClose: () => void;
-  // Agora vamos passar um array de alimentos para o Slivi
   onSelectFood: (foods: any[]) => void;
 };
 
-// Componente interno para cada item arrastável
 const DraggableFood = ({ item, onDropOnPlate }: { item: any, onDropOnPlate: (item: any) => void }) => {
   const pan = useRef(new Animated.ValueXY()).current;
   const sprites = FOOD_IMAGES[item.image_key as keyof typeof FOOD_IMAGES];
@@ -41,12 +49,10 @@ const DraggableFood = ({ item, onDropOnPlate }: { item: any, onDropOnPlate: (ite
         { useNativeDriver: false }
       ),
       onPanResponderRelease: (e, gestureState) => {
-        // Se soltou o dedo na metade direita da tela (Área do prato)
         if (gestureState.moveX > SCREEN_WIDTH / 2) {
           onDropOnPlate(item);
         }
 
-        // Faz a comida voltar pro lugar original na geladeira (suavemente)
         Animated.spring(pan, {
           toValue: { x: 0, y: 0 },
           useNativeDriver: false,
@@ -69,20 +75,21 @@ const DraggableFood = ({ item, onDropOnPlate }: { item: any, onDropOnPlate: (ite
 
       <Text style={styles.effect}>+{item.hunger} Fome</Text>
       <Text style={styles.effect}>+{item.energy} Energia</Text>
-      <Text style={styles.effect}>+{item.happiness} Felicidade</Text>
+      <Text style={styles.effect}>+{item.happiness} Feliz</Text>
     </Animated.View>
   );
 };
 
 export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
-  const [foods, setFoods] = useState<any[]>([]);
+  // Agora armazenamos o objeto agrupado
+  const [groupedFoods, setGroupedFoods] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(false);
   const [plateItems, setPlateItems] = useState<any[]>([]);
 
   useEffect(() => {
     if (visible) {
       loadFoods();
-      setPlateItems([]); // Limpa o prato ao abrir o modal
+      setPlateItems([]);
     }
   }, [visible]);
 
@@ -90,7 +97,7 @@ export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
     try {
       setLoading(true);
       const result = await fetchFoods();
-      setFoods(result);
+      setGroupedFoods(result); // Guarda o resultado agrupado
     } catch (err) {
       console.error("Erro ao carregar alimentos", err);
     } finally {
@@ -98,20 +105,20 @@ export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
     }
   }
 
-
   const handleDropOnPlate = (droppedItem: any) => {
-
     setPlateItems((prevPlate) => [...prevPlate, droppedItem]);
 
+    setGroupedFoods((prevFoods) => {
+      const type = droppedItem.type;
+      if (!prevFoods[type]) return prevFoods;
 
-    setFoods((prevFoods) =>
-      prevFoods.map((food) => {
-        if (food.id === droppedItem.id) {
-          return { ...food, quantity: food.quantity - 1 }; // Tira 1 do estoque local
-        }
-        return food;
-      })
-    );
+      return {
+        ...prevFoods,
+        [type]: prevFoods[type].map((food) =>
+          food.id === droppedItem.id ? { ...food, quantity: food.quantity - 1 } : food
+        )
+      };
+    });
   };
 
   const removeFromPlate = (indexToRemove: number, itemToRemove: any) => {
@@ -120,14 +127,18 @@ export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
       newPlate.splice(indexToRemove, 1); 
       return newPlate;
     });
-    setFoods((prevFoods) =>
-      prevFoods.map((food) => {
-        if (food.id === itemToRemove.id) {
-          return { ...food, quantity: food.quantity + 1 };
-        }
-        return food;
-      })
-    );
+
+    setGroupedFoods((prevFoods) => {
+      const type = itemToRemove.type;
+      if (!prevFoods[type]) return prevFoods;
+
+      return {
+        ...prevFoods,
+        [type]: prevFoods[type].map((food) =>
+          food.id === itemToRemove.id ? { ...food, quantity: food.quantity + 1 } : food
+        )
+      };
+    });
   };
 
   const handleServe = () => {
@@ -135,7 +146,6 @@ export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
       Alert.alert("Prato Vazio", "Coloque alguma comida no prato antes de servir!");
       return;
     }
-    // Manda os itens do prato de volta para a Home processar
     onSelectFood(plateItems);
     onClose();
   };
@@ -157,16 +167,31 @@ export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
               {loading ? (
                 <ActivityIndicator size="large" color="#FF9800" />
               ) : (
-                <ScrollView contentContainerStyle={styles.fridgeContent}>
-                  {foods
-                    .filter((food) => food.quantity > 0) // O SEGREDO TÁ AQUI!
-                    .map((food) => (
-                      <DraggableFood
-                        key={food.id}
-                        item={food}
-                        onDropOnPlate={handleDropOnPlate}
-                      />
-                    ))}
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {Object.entries(groupedFoods).map(([category, items]) => {
+                    // Filtra para exibir apenas os que tem na geladeira
+                    const availableItems = items.filter((food) => food.quantity > 0);
+                    
+                    // Se não tiver nenhum item dessa categoria, não renderiza o título
+                    if (availableItems.length === 0) return null;
+
+                    return (
+                        <View key={category} style={styles.categoryContainer}>
+                            <Text style={styles.categoryTitle}>
+                                {CATEGORY_LABELS[category] || category}
+                            </Text>
+                            <View style={styles.fridgeRow}>
+                                {availableItems.map((food) => (
+                                    <DraggableFood
+                                        key={food.id}
+                                        item={food}
+                                        onDropOnPlate={handleDropOnPlate}
+                                    />
+                                ))}
+                            </View>
+                        </View>
+                    );
+                  })}
                 </ScrollView>
               )}
             </View>
@@ -176,7 +201,6 @@ export default function FoodModal({ visible, onClose, onSelectFood }: Props) {
               <View style={styles.plateArea}>
                 <Text style={styles.plateText}>Prato ({plateItems.length}/3)</Text>
 
-                {/* Visualização dos itens que estão no prato */}
                 <View style={styles.plate}>
                   {plateItems.map((item, index) => {
                     const sprites = FOOD_IMAGES[item.image_key as keyof typeof FOOD_IMAGES];
@@ -225,7 +249,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
-    height: "75%", // Altura fixa para garantir espaço pro drag and drop
+    height: "75%", 
   },
   header: {
     alignItems: "center",
@@ -244,7 +268,7 @@ const styles = StyleSheet.create({
   },
   splitArea: {
     flex: 1,
-    flexDirection: "row", // A mágica da divisão
+    flexDirection: "row", 
     marginTop: 10,
   },
   leftSide: {
@@ -253,11 +277,26 @@ const styles = StyleSheet.create({
     borderColor: "#333",
     paddingRight: 10,
   },
-  fridgeContent: {
+  
+  // Novos estilos para categorizar a geladeira
+  categoryContainer: {
+    marginBottom: 15,
+  },
+  categoryTitle: {
+    color: "#FF9800",
+    fontSize: 14,
+    fontWeight: "bold",
+    marginBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+    paddingBottom: 4,
+  },
+  fridgeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
   },
+
   rightSide: {
     flex: 1,
     paddingLeft: 10,
@@ -265,13 +304,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   card: {
-    width: "45%", // Para caber 2 por linha no lado esquerdo
+    width: "48%", // Para caber 2 por linha garantido
     marginBottom: 12,
     backgroundColor: "#2a2a2a",
     borderRadius: 16,
     padding: 8,
     alignItems: "center",
-    zIndex: 10, // Importante para a imagem passar por cima do prato ao arrastar
+    zIndex: 10, 
   },
   image: {
     width: 60,
@@ -283,6 +322,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginTop: 6,
     fontSize: 12,
+    textAlign: "center"
   },
   quantity: {
     color: "#4AFF88",

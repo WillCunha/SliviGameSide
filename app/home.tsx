@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import ConfettiCannon from 'react-native-confetti-cannon';
 
 // --- IMPORTS DOS COMPONENTES ---
 import RainAnimation from '@/components/RainAnimation';
@@ -39,6 +38,7 @@ import { fetchSliviState } from '@/src/services/sliviService';
 import { Emotion } from '@/src/types/emotions';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import PhoneMinigame from './games/PhoneMinigame';
 
 const { width } = Dimensions.get('window');
 const WINDOW_SIZE = width * 0.6;
@@ -90,6 +90,8 @@ export default function HomeScreen() {
   const [sliviStates, setSliviStates] = useState<{
     HUNGER: number; ENERGY: number; SLEEP: number; TEMPERATURE: number; FUN: number; BRAVO: number;
   } | null>(parsedSliviState ? parsedSliviState.states : null);
+
+
 
 
   // --- ESTADOS DO JOGO ---
@@ -170,7 +172,13 @@ export default function HomeScreen() {
   const prevEmotionRef = useRef<Emotion | null>(null);
   const moodTranslateY = useRef(new Animated.Value(0)).current;
   const [visualEmotion, setVisualEmotion] = useState<Emotion>(emotion);
-  const moodSoundRef = useRef<Audio.Sound | null>(null);
+
+  // --- ESTADO DE RELAÇÃO ---
+  const [relationship, setRelationship] = useState<{
+    affection_points: number; relation_level: number; level_name: string;
+  } | null>(parsedSliviState ? parsedSliviState.relationship : null);
+  const [showRelationTooltip, setShowRelationTooltip] = useState(false);
+  const relationTooltipOpacity = useRef(new Animated.Value(0)).current;
 
   // Função para interpolar o valor de XP em Porcentagem (0% a 100%)
   const progressWidth = xpProgress.interpolate({
@@ -430,6 +438,7 @@ export default function HomeScreen() {
 
       setEmotion(state.emotion);
       setSliviStates(state.states);
+      setRelationship(state.relationship);
 
       if (state.clothing) {
         setSliviClothing(state.clothing);
@@ -1005,12 +1014,60 @@ export default function HomeScreen() {
     });
   };
 
+  // --- FORMATA O VALOR DO S-COINS ---
   const formatMoney = (value: number) => {
     return (value / 100)
       .toFixed(2) // Garante 2 casas decimais
       .replace('.', ',') // Troca o ponto da casa decimal por vírgula
       .replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.'); // Adiciona os pontos de milhar
   };
+
+  // --- BALÃO DOS DADOS DE RELACIONAMENTO ---
+  const toggleRelationTooltip = () => {
+    if (showRelationTooltip) {
+      // Fade out
+      Animated.timing(relationTooltipOpacity, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => setShowRelationTooltip(false));
+    } else {
+      // Fade in
+      setShowRelationTooltip(true);
+      Animated.timing(relationTooltipOpacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }).start();
+    }
+  };
+
+  // --- CÁLCULO DE PROGRESSO DE RELAÇÃO ---
+  const getRelationProgress = () => {
+    if (!relationship) return 0;
+
+    const { relation_level, affection_points } = relationship;
+    let min = 0;
+    let max = 1;
+
+    // Define os limites com base na regra do servidor
+    switch (relation_level) {
+      case 1: min = 0; max = 300; break;
+      case 2: min = 300; max = 700; break;
+      case 3: min = 700; max = 1200; break;
+      case 4: min = 1200; max = 2000; break;
+      case 5: return 100; // Se estiver no nível máximo, a barra fica cheia
+      default: return 0;
+    }
+
+    // Trava os pontos entre o mínimo e o máximo para não vazar o layout (caso o servidor demore a virar o nível)
+    const currentPoints = Math.max(min, Math.min(affection_points, max));
+
+    // Retorna a porcentagem de 0 a 100
+    return ((currentPoints - min) / (max - min)) * 100;
+  };
+
+  const relationProgressPercent = getRelationProgress();
 
   // Pega os caminhos (ex: "/pants/...") do estado sliviClothing 
   // e busca a imagem correspondente no nosso dicionário CLOTHES_IMAGES.
@@ -1047,13 +1104,52 @@ export default function HomeScreen() {
             <Image source={require('@/assets/images/components/s-coins_logo.png')} resizeMode='contain' style={{ width: 32, height: 32 }} />
             <Text style={styles.txtMoney}>{formatMoney(money)}</Text>
           </View>
-          {/* <TouchableOpacity onPress={loadGameData} style={styles.iconButton}>
-            <Ionicons
-              name="refresh-circle-outline"
-              size={26}
-              color="#000"
-            />
-          </TouchableOpacity> */}
+          <View style={{ position: 'relative', zIndex: 50 }}>
+            {/* O Background que funciona como Barra de Progresso */}
+
+            <View style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0.5,
+              right: 0,
+              height: `${relationProgressPercent}%`, // Usa a porcentagem calculada!
+              backgroundColor: '#6bfff8', // Uma cor coral/coração bem legal, pode mudar pro tom que quiser!
+              zIndex: -1,
+              marginTop: '-5%',
+              borderBottomLeftRadius: 12,
+              borderBottomRightRadius: 12,
+              // Fica atrás do texto
+            }} />
+
+            <TouchableOpacity
+              onPress={toggleRelationTooltip}
+              style={[styles.iconButton, {
+                minHeight: 50, maxHeight: 50, minWidth: 49, maxWidth: 49,
+                overflow: 'hidden', // Garante que o fundo preenchido obedeça o arredondamento
+                padding: 0, // Removemos o padding para a barra poder grudar no chão
+              }]}
+            >
+
+              {/* Centraliza o número do nível */}
+              <View style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
+                <Text style={{ fontWeight: '900', fontSize: 22 }}>{relationship?.relation_level}</Text>
+              </View>
+
+            </TouchableOpacity>
+
+            {/* O Balãozinho (já implementado no passo anterior) */}
+
+          </View>
+          {showRelationTooltip && (
+            <Animated.View style={[styles.relationBalloon, { opacity: relationTooltipOpacity }]}>
+              <Text style={styles.relationBalloonText}>
+                Pontos de Relacionamento: {relationship?.affection_points} {"\n"}{"\n"}
+                O Slivi atualmente te considera "{relationship?.level_name || "Amigo"}". Para aumentar seus Pontos de Relacionamento
+                 e melhorar o nível de relação, cuide e mantenha um vínculo diário.
+              </Text>
+            </Animated.View>
+          )}
+
           <TouchableOpacity onPress={toggleLight} style={styles.iconButton}>
             <Ionicons
               name={isLightOn ? "bulb" : "bulb-outline"}
@@ -1069,9 +1165,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           {/* Sair/Engrenagem */}
-          <TouchableOpacity onPress={handleLogout} style={styles.iconButton}>
+          {/* <TouchableOpacity onPress={handleLogout} style={styles.iconButton}>
             <Ionicons name="exit" size={26} color="#000" />
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </View>
 
@@ -1195,7 +1291,7 @@ export default function HomeScreen() {
             setFoodModalVisible(true);
           }
         }} style={styles.bottomNavIcon}>
-          <Ionicons name="restaurant" size={32} color="#000" />
+          <Ionicons name="restaurant" size={26} color="#000" />
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => {
@@ -1203,7 +1299,7 @@ export default function HomeScreen() {
             setClothesModalVisible(true);
           }
         }} style={styles.bottomNavIcon}>
-          <MaterialCommunityIcons name="tshirt-v" size={32} color="#000" />
+          <MaterialCommunityIcons name="tshirt-v" size={26} color="#000" />
         </TouchableOpacity>
 
         <View style={{ alignItems: 'center' }}>
@@ -1263,7 +1359,7 @@ export default function HomeScreen() {
             style={styles.bottomNavIcon}
             onPress={() => { if (isLightOn) { setMenuOpen(prev => !prev) } }}
           >
-            <Ionicons name="game-controller-sharp" size={32} color="#000" />
+            <Ionicons name="game-controller-sharp" size={26} color="#000" />
           </TouchableOpacity>
 
         </View>
@@ -1279,9 +1375,19 @@ export default function HomeScreen() {
           }
         }
         } style={styles.bottomNavIcon}>
-          <Ionicons name='storefront' size={32} color="#000" />
+          <Ionicons name='storefront' size={26} color="#000" />
         </TouchableOpacity>
       </View>
+
+      <PhoneMinigame
+        isLightOn={isLightOn}
+        onGameEnd={(finalScore) => {
+          if (finalScore > 0) {
+            // Chamar API ou dar XP/Dinheiro
+            console.log(`Computando prêmios para pontuação: ${finalScore}`);
+          }
+        }}
+      />
 
 
       <FoodModal
@@ -1295,15 +1401,7 @@ export default function HomeScreen() {
 
       {rewardWord && (
         <View style={styles.rewardOverlay}>
-          <ConfettiCannon
-            count={200}
-            origin={{ x: -10, y: 0 }}
-            autoStart={true}
-            fadeOut={true}
-            fallSpeed={2500}
-            explosionSpeed={350}
-          // colors={['#ff0', '#f0f', '#0ff', '#f00', '#0f0']} 
-          />
+
           <Animated.Image
             source={(REWARDS_IMAGES as any)[rewardWord]}
             style={[
@@ -1450,6 +1548,45 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
   },
 
+  // --- RELATION BALLOON STYLES ---
+  relationBalloon: {
+    position: 'absolute',
+    top: 60,
+    left: '20%',
+    width: '100%',
+    transform: [{ translateX: -60 }],
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 2, height: 3 },
+    shadowOpacity: 1,
+    shadowRadius: 0,
+    elevation: 5,
+  },
+  relationBalloonTail: {
+    position: 'absolute',
+    top: -7,
+    marginLeft: -6,
+    backgroundColor: '#fff',
+    width: '100%',
+    borderTopWidth: 2,
+    borderLeftWidth: 2,
+    borderColor: '#000',
+    transform: [{ rotate: '45deg' }],
+  },
+  relationBalloonText: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#000',
+    textAlign: 'left',
+  },
+
 
   // --- WINDOW & SLIVI STYLES ---
   windowWrapper: {
@@ -1556,21 +1693,21 @@ const styles = StyleSheet.create({
   bottomNavBar: {
     width: '90%',
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     marginBottom: 40,
     zIndex: 10,
+    gap: 10
   },
   bottomNavIcon: {
     backgroundColor: 'transparent',
     borderWidth: 2,
     borderColor: '#000',
     borderRadius: 15,
-    padding: 15,
     alignItems: 'center',
-    width: 70,
-    height: 70,
-    marginHorizontal: 5,
+    justifyContent: 'center',
+    width: 50,
+    height: 50,
   },
   dropdownMenu: {
     position: 'absolute',

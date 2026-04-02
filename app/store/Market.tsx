@@ -4,12 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
-    FlatList,
     Image,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -17,16 +17,24 @@ import {
     View
 } from 'react-native';
 
+// Dicionário para deixar os nomes das categorias bonitos na tela
+const CATEGORY_LABELS: Record<string, string> = {
+    VERDURAS: '🥗 Verduras',
+    CARNES: '🥩 Carnes',
+    FRUTAS: '🍎 Frutas',
+    MASSA: '🥖 Massas & Pães',
+    OVOS: '🥚 Ovos',
+    LATICINIOS: '🥛 Laticínios',
+};
 
 export default function MarketScreen() {
-
     const params = useLocalSearchParams();
-    const [foods, setFoods] = useState<MarketFood[]>([]);
+    // Agora o estado guarda as comidas agrupadas
+    const [groupedFoods, setGroupedFoods] = useState<Record<string, MarketFood[]>>({});
     const [loading, setLoading] = useState(true);
     const [buying, setBuying] = useState(false);
     const [money, setMoney] = useState(Number(params.money));
 
-    // Estado do carrinho: { food_id: quantidade }
     const [cart, setCart] = useState<Record<number, number>>({});
 
     useEffect(() => {
@@ -39,7 +47,7 @@ export default function MarketScreen() {
             if (!token) throw new Error("Usuário não autenticado");
 
             const data = await fetchMarketFoods(token);
-            setFoods(data);
+            setGroupedFoods(data); // Salva o objeto agrupado retornado pela API
         } catch (error) {
             Alert.alert("Erro", "Não foi possível carregar os produtos do mercado.");
         } finally {
@@ -47,15 +55,13 @@ export default function MarketScreen() {
         }
     };
 
-    // Função para atualizar quantidade pelos botões + e -
     const updateQuantity = (id: number, delta: number) => {
         setCart(prev => {
             const currentQty = prev[id] || 0;
             const nextQty = Math.max(0, currentQty + delta);
-
             const newCart = { ...prev };
             if (nextQty === 0) {
-                delete newCart[id]; // Remove do carrinho se for 0
+                delete newCart[id];
             } else {
                 newCart[id] = nextQty;
             }
@@ -63,7 +69,6 @@ export default function MarketScreen() {
         });
     };
 
-    // Função para atualizar quantidade via digitação
     const handleTextChange = (id: number, text: string) => {
         const val = parseInt(text.replace(/[^0-9]/g, ''), 10);
         setCart(prev => {
@@ -93,61 +98,47 @@ export default function MarketScreen() {
                 return;
             }
 
-            // Faz a chamada para a API
             const response = await buyMarketItems(token, itemsToBuy);
 
-            // Se chegou aqui, success foi true (conforme lógica do seu client.ts)
-            Alert.alert(
-                "Sucesso",
-                response.message || "Compra realizada com sucesso!",
-                [
-                    {
-                        text: "OK",
-                        onPress: () => router.replace('/home') // Redireciona para a Home
-                    }
-                ]
-            );
+            Alert.alert("Sucesso", response.message || "Compra realizada com sucesso!", [
+                { text: "OK", onPress: () => router.replace('/home') }
+            ]);
 
-            setCart({}); // Limpa o carrinho local
-
+            setCart({});
         } catch (error: any) {
-            // Se success foi false, o erro lançado no client.ts cai aqui
-            // O error.message conterá o texto vindo do backend (ex: "Saldo insuficiente de S-Coins.")
             Alert.alert("Ops!", error.message || "Ocorreu um erro ao processar a compra.");
         } finally {
             setBuying(false);
         }
     };
-    // Cálculos para o painel de checkout
+
+    // Achata o objeto agrupado em um array simples só para facilitar a busca do preço
+    const flatFoods = useMemo(() => Object.values(groupedFoods).flat(), [groupedFoods]);
+
     const totalItems = Object.values(cart).reduce((acc, qty) => acc + qty, 0);
     const totalPrice = Object.entries(cart).reduce((acc, [id, qty]) => {
-        const food = foods.find(f => f.id === Number(id));
+        const food = flatFoods.find(f => f.id === Number(id));
         return acc + (food ? food.price * qty : 0);
     }, 0);
 
     const formatMoney = (value: number) => {
         return (value / 100)
-            .toFixed(2) // Garante 2 casas decimais
-            .replace('.', ',') // Troca o ponto da casa decimal por vírgula
-            .replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.'); // Adiciona os pontos de milhar
+            .toFixed(2)
+            .replace('.', ',')
+            .replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.');
     };
 
-    const renderFoodItem = ({ item }: { item: MarketFood }) => {
-        console.log("items: " + JSON.stringify(item));
-        const imageSource = FOOD_IMAGES[item.image_key]?.[0];
+    const renderFoodItem = (item: MarketFood) => {
+        const imageSource = FOOD_IMAGES[item.image_key as keyof typeof FOOD_IMAGES]?.[0];
         const qty = cart[item.id] || 0;
         const totalItemPrice = qty > 0 ? qty * item.price : item.price;
 
         return (
-            <View style={styles.card}>
-
-
+            <View key={item.id} style={styles.card}>
                 <StatusBar style="dark" />
-
-                <Image source={imageSource} style={styles.foodImage} resizeMode="contain" />
+                {imageSource && <Image source={imageSource} style={styles.foodImage} resizeMode="contain" />}
                 <Text style={styles.foodName}>{item.name}</Text>
 
-                {/* Preços */}
                 <View style={styles.priceContainer}>
                     <Text style={styles.unitPrice}>Unid: 🪙 {formatMoney(item.price)}</Text>
                     {qty > 0 && (
@@ -155,12 +146,8 @@ export default function MarketScreen() {
                     )}
                 </View>
 
-                {/* Controle de Quantidade */}
                 <View style={styles.quantityContainer}>
-                    <TouchableOpacity
-                        style={styles.qtyBtn}
-                        onPress={() => updateQuantity(item.id, -1)}
-                    >
+                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQuantity(item.id, -1)}>
                         <Text style={styles.qtyBtnText}>-</Text>
                     </TouchableOpacity>
 
@@ -173,10 +160,7 @@ export default function MarketScreen() {
                         onChangeText={(text) => handleTextChange(item.id, text)}
                     />
 
-                    <TouchableOpacity
-                        style={styles.qtyBtn}
-                        onPress={() => updateQuantity(item.id, 1)}
-                    >
+                    <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQuantity(item.id, 1)}>
                         <Text style={styles.qtyBtnText}>+</Text>
                     </TouchableOpacity>
                 </View>
@@ -202,24 +186,30 @@ export default function MarketScreen() {
                 <Text style={styles.headerMoney}>{formatMoney(money)}</Text>
             </View>
 
-            <FlatList
-                data={foods}
-                keyExtractor={(item) => item.id.toString()}
-                numColumns={2}
-                contentContainerStyle={[styles.listContent, totalItems > 0 && { paddingBottom: 100 }]} // Espaço para a barra inferior
-                columnWrapperStyle={styles.row}
-                renderItem={renderFoodItem}
+            {/* Substituímos a FlatList por ScrollView para renderizar as categorias */}
+            <ScrollView 
+                contentContainerStyle={[styles.listContent, totalItems > 0 && { paddingBottom: 100 }]}
                 showsVerticalScrollIndicator={false}
-            />
+            >
+                {Object.entries(groupedFoods).map(([category, items]) => (
+                    <View key={category} style={styles.categorySection}>
+                        <Text style={styles.categoryTitle}>
+                            {CATEGORY_LABELS[category] || category}
+                        </Text>
+                        <View style={styles.row}>
+                            {items.map(item => renderFoodItem(item))}
+                        </View>
+                    </View>
+                ))}
+            </ScrollView>
 
-            {/* Barra Inferior Flutuante (Checkout) */}
             {totalItems > 0 && (
                 <View style={styles.checkoutBar}>
                     <View>
                         <Text style={styles.checkoutTotalItems}>{totalItems} itens na cesta</Text>
                         <Text style={[
                             styles.checkoutTotalPrice,
-                            totalPrice > money && { color: '#FF4A4A' } // Se o total for maior que o saldo, fica vermelho
+                            totalPrice > money && { color: '#FF4A4A' }
                         ]}>Total: 🪙 {formatMoney(totalPrice)}</Text>
                     </View>
                     <TouchableOpacity
@@ -243,15 +233,21 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: '#EBE3CD' },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#EBE3CD' },
     header: {
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-        paddingTop: 50, paddingBottom: 20, paddingHorizontal: 5,
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
+        paddingTop: 50, paddingBottom: 20,
         backgroundColor: '#fff', borderBottomWidth: 2, borderColor: '#000', width: '100%',
     },
     backButton: { padding: 5 },
     headerTitle: { fontSize: 20, fontWeight: '900', color: '#000', textTransform: 'uppercase', },
-    headerMoney: { fontSize: 20, fontWeight: '900', color: '#000', textTransform: 'uppercase', marginRight: '-10%' },
+    headerMoney: { fontSize: 20, fontWeight: '900', color: '#000', textTransform: 'uppercase', },
     listContent: { padding: 10 },
-    row: { justifyContent: 'space-between' },
+    
+    // Novos estilos para as categorias
+    categorySection: { marginBottom: 20 },
+    categoryTitle: { fontSize: 18, fontWeight: '900', color: '#000', marginBottom: 10, marginLeft: 5 },
+    
+    // O flexWrap faz os cards quebrarem de linha, simulando as 2 colunas da FlatList antiga
+    row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
 
     card: {
         backgroundColor: '#fff', borderWidth: 2, borderColor: '#000', borderRadius: 15,
