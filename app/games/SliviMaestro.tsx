@@ -1,4 +1,5 @@
 import River from '@/components/River';
+import { useBackToLoading } from '@/components/useBackToLoading';
 import { CLOTHES_IMAGES } from '@/src/components/clothes/clothesMap';
 import { getObjectives, sendGameScore } from '@/src/services/gameService';
 import { Emotion } from '@/src/types/emotions';
@@ -93,6 +94,8 @@ function getInitialConfig(emotion: Emotion) {
    COMPONENTE PRINCIPAL
 ===================== */
 export default function SliviMaestro({ initialEmotion = 'NEUTRO' }: SliviMaestroProps) {
+    const { handleBack } = useBackToLoading();
+
     const params = useLocalSearchParams();
 
     const clothingParam = typeof params.clothing === 'string' ? params.clothing : '[]';

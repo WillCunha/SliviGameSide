@@ -38,6 +38,7 @@ import { fetchSliviState } from '@/src/services/sliviService';
 import { Emotion } from '@/src/types/emotions';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Asset } from 'expo-asset';
 import PhoneMinigame from './games/PhoneMinigame';
 
 const { width } = Dimensions.get('window');
@@ -73,6 +74,7 @@ const WEATHER_IMAGES = {
 export default function HomeScreen() {
 
   const params = useLocalSearchParams();
+  const {unlockEvent} = useLocalSearchParams();
 
   const token = typeof params.token === 'string' ? params.token : undefined;
   const userId = typeof params.userId === 'string' ? Number(params.userId) : undefined;
@@ -92,13 +94,13 @@ export default function HomeScreen() {
   } | null>(parsedSliviState ? parsedSliviState.states : null);
 
 
-
-
   // --- ESTADOS DO JOGO ---
   const [emotion, setEmotion] = useState<Emotion>('NEUTRO');
   const [money, setMoney] = useState(parsedSliviState ? parsedSliviState.wallet : null);
   const [loading, setLoading] = useState(true);
   const [loadingMsg, setLoadingMsg] = useState("");
+  const [isGameActive, setIsGameActive] = useState(false);
+  const [isPlayingMinigame, setIsPlayingMinigame] = useState(false);
 
   // --- ESTADOS DE CLIMA ---
   const [weather, setWeather] = useState<WeatherState>({
@@ -241,6 +243,25 @@ export default function HomeScreen() {
     return () => clearInterval(intervalId);
   }, [token]);
 
+  // Controla as falas de conquistas.
+  useEffect(() => {
+    if (unlockEvent) {
+      const timer = setTimeout(() => {
+        if (unlockEvent === 'item') {
+          handleSliviSpeech('comemoraItem', true); 
+        } else if (unlockEvent === 'seal') {
+          handleSliviSpeech('conquistaSelo', true); 
+        }
+      }, 2000);
+
+      // Limpa o parâmetro da rota imediatamente para que, 
+      // se a tela re-renderizar, ele não repita a comemoração.
+      router.setParams({ unlockEvent: undefined });
+
+      return () => clearTimeout(timer);
+    }
+  }, [unlockEvent]);
+
   // Checa as notificações
   useEffect(() => {
     if (token) checkNotificationsStatus();
@@ -369,8 +390,10 @@ export default function HomeScreen() {
           const randomAudio = categoryData.audios[Math.floor(Math.random() * categoryData.audios.length)];
 
           try {
+            const asset = Asset.fromModule(randomAudio);
+            await asset.downloadAsync();
             const { sound: sfxSound } = await Audio.Sound.createAsync(
-              randomAudio,
+              { uri: asset.localUri || asset.uri },
               { shouldPlay: true, volume: 0.1 }
             );
 
@@ -413,7 +436,6 @@ export default function HomeScreen() {
     }
     prevEmotionRef.current = emotion;
   }, [emotion]);
-
 
   // --- CHAMA AS FUNÇÕES DE ATUALIZAÇÃO DE DADOS ---
   async function loadGameData() {
@@ -723,8 +745,10 @@ export default function HomeScreen() {
   // --- LÓGICA DE RECOMPENSA POR ALIMENTAR-SE
   const triggerRewardAnimation = async (word: string) => {
     try {
+      const moodAssetReward = Asset.fromModule(require('@/assets/audios/effects/conquista/epic_food_reward_02.mp3'));
+      await moodAssetReward.downloadAsync();
       const { sound: rewardSound } = await Audio.Sound.createAsync(
-        require('@/assets/audios/effects/conquista/epic_food_reward_02.mp3'),
+        { uri: moodAssetReward.localUri || moodAssetReward.uri },
         { shouldPlay: true, volume: 1.0 }
       );
       rewardSound.setOnPlaybackStatusUpdate((status: any) => {
@@ -856,8 +880,9 @@ export default function HomeScreen() {
       if (obtainedCombo) {
         // Se teve combo, a animação assume o controle e o Slivi só fala no final dela
         triggerRewardAnimation(obtainedCombo);
+      } else if (response.sick_message === 200) {
+        handleSliviSpeech('fimComerEnjoado', true);
       } else {
-        // Se não teve combo, o Slivi fala normalmente
         handleSliviSpeech('fimComer', true);
       }
 
@@ -981,10 +1006,10 @@ export default function HomeScreen() {
   // --- LÓGICA DE ANIMAÇÃO DE TROCA DE PERSONAGEM BASEADA NO HUMOR ---
   const triggerMoodChange = async (newEmotion: Emotion) => {
     try {
-      // Criamos o som do zero SEMPRE. 
-      // Usar o require direto aqui força o Expo a verificar o asset novamente.
+      const moodAssetMoodChange = Asset.fromModule(require('@/assets/audios/effects/mood_change_positive.mp3'));
+      await moodAssetMoodChange.downloadAsync();
       const { sound: moodSound } = await Audio.Sound.createAsync(
-        require('@/assets/audios/effects/mood_change_positive.mp3'),
+        { uri: moodAssetMoodChange.localUri || moodAssetMoodChange.uri },
         { shouldPlay: true, volume: 0.8 }
       );
 
@@ -1145,7 +1170,7 @@ export default function HomeScreen() {
               <Text style={styles.relationBalloonText}>
                 Pontos de Relacionamento: {relationship?.affection_points} {"\n"}{"\n"}
                 O Slivi atualmente te considera "{relationship?.level_name || "Amigo"}". Para aumentar seus Pontos de Relacionamento
-                 e melhorar o nível de relação, cuide e mantenha um vínculo diário.
+                e melhorar o nível de relação, cuide e mantenha um vínculo diário.
               </Text>
             </Animated.View>
           )}
@@ -1331,14 +1356,14 @@ export default function HomeScreen() {
 
               <TouchableOpacity style={styles.dropdownItem}
                 onPress={() => {
-                  // router.push({
-                  //   pathname: './games/GameQuiz/GameMenuScreen',
-                  //   params: { emotion: emotion }
-                  // })
                   router.push({
-                    pathname: "/games/ItemUnlocked",
-                    params: { clothId: '7' } // Enviamos o ID para a nova tela
-                  });
+                    pathname: './games/GameQuiz/GameMenuScreen',
+                    params: { emotion: emotion }
+                  })
+                  // router.push({
+                  //   pathname: "/games/ItemUnlocked",
+                  //   params: { clothId: '7' } // Enviamos o ID para a nova tela
+                  // });
                   // router.replace({
                   //   pathname: '/games/GameQuiz/GameOverScreen',
                   //   params: { 
@@ -1380,13 +1405,27 @@ export default function HomeScreen() {
       </View>
 
       <PhoneMinigame
-        isLightOn={isLightOn}
-        onGameEnd={(finalScore) => {
-          if (finalScore > 0) {
-            // Chamar API ou dar XP/Dinheiro
-            console.log(`Computando prêmios para pontuação: ${finalScore}`);
+        onGameStart={() => {
+          setIsGameActive(true);
+          setIsPlayingMinigame(true);
+        }}
+        onGameEnd={(score) => {
+          setIsGameActive(false);
+          setIsPlayingMinigame(false);
+          // Aqui você retoma os sons se quiser
+        }}
+        onSliviReaction={async (reaction) => {
+          if (reaction === 'praise') {
+            handleSliviSpeech('conquistaPonto')
+          }
+          else if (reaction === 'miss') {
+            handleSliviSpeech('perdePonto')
+          }
+          else if (reaction === 'bomb') {
+            handleSliviSpeech('perdeGame')
           }
         }}
+        isLightOn={isLightOn}
       />
 
 

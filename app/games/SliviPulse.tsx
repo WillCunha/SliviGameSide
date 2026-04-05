@@ -1,3 +1,4 @@
+import { useBackToLoading } from '@/components/useBackToLoading';
 import { CLOTHES_IMAGES } from '@/src/components/clothes/clothesMap';
 import { getObjectives, sendGameScore } from '@/src/services/gameService';
 import { Emotion } from '@/src/types/emotions';
@@ -97,6 +98,8 @@ type GameObjective = {
 export default function SliviPulse({ emotion }: { emotion: Emotion }) {
 
   const params = useLocalSearchParams();
+
+  const { handleBack } = useBackToLoading();
 
   const sliviEmotion = params.emotion;
   console.log(sliviEmotion);
@@ -654,7 +657,10 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
         params: { seals: JSON.stringify(unlocked_seals) }
       });
     } else {
-      router.replace("../loading");
+      router.replace({
+        pathname: '/loading',
+        params: { token, userId },
+      });
     }
   }
 

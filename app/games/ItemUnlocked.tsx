@@ -4,6 +4,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 // 1. Importando o Audio do expo-av
+import { useBackToLoading } from '@/components/useBackToLoading';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 
 interface ClothData {
@@ -15,6 +17,8 @@ interface ClothData {
 }
 
 export default function ItemUnlocked() {
+    const { handleBack } = useBackToLoading();
+
     const router = useRouter();
     const params = useLocalSearchParams();
     const clothId = Number(params.clothId);
@@ -22,15 +26,15 @@ export default function ItemUnlocked() {
     const [cloth, setCloth] = useState<ClothData | null>(null);
     const [loading, setLoading] = useState(true);
     const [isOpen, setIsOpen] = useState(false);
-    
+
     const [titleText, setTitleText] = useState("VOCÊ DESBLOQUEOU UMA RECOMPENSA!");
 
     const boxScale = useRef(new Animated.Value(0)).current;
     const boxRotation = useRef(new Animated.Value(0)).current;
     const itemScale = useRef(new Animated.Value(0)).current;
-    const itemTranslateY = useRef(new Animated.Value(50)).current; 
-    
-    const titleOpacity = useRef(new Animated.Value(0)).current; 
+    const itemTranslateY = useRef(new Animated.Value(50)).current;
+
+    const titleOpacity = useRef(new Animated.Value(0)).current;
     const buttonOpacity = useRef(new Animated.Value(0)).current;
     const floatBoxY = useRef(new Animated.Value(0)).current;
     const floatImageY = useRef(new Animated.Value(0)).current;
@@ -68,20 +72,31 @@ export default function ItemUnlocked() {
         };
     }, []);
 
+    async function handleNext() {
+        const storedToken = await AsyncStorage.getItem('slivi_token');
+        router.replace({
+            pathname: '/loading', // Ajuste para o caminho exato da sua loading
+            params: {
+                token: storedToken, // Garanta que o token está sendo passado
+                unlockEvent: 'item'
+            }
+        });
+    };
+
     // --- Função para tocar os áudios ---
     const playSound = async (type: 'appear' | 'coral') => {
         try {
             if (type === 'appear') {
                 // ATENÇÃO: Ajuste o caminho do áudio da caixa surgindo!
                 const { sound } = await Audio.Sound.createAsync(
-                    require('@/assets/audios/effects/box_entrance.mp3') 
+                    require('@/assets/audios/effects/box_entrance.mp3')
                 );
                 soundAppearRef.current = sound;
                 await sound.playAsync();
             } else if (type === 'coral') {
                 // ATENÇÃO: Ajuste o caminho do áudio do coral!
                 const { sound } = await Audio.Sound.createAsync(
-                    require('@/assets/audios/effects/coral_saida_objeto.mp3') 
+                    require('@/assets/audios/effects/coral_saida_objeto.mp3')
                 );
                 soundCoralRef.current = sound;
                 await sound.playAsync();
@@ -95,13 +110,13 @@ export default function ItemUnlocked() {
         boxFloatAnimation.current = Animated.loop(
             Animated.sequence([
                 Animated.timing(floatBoxY, {
-                    toValue: -15, 
+                    toValue: -15,
                     duration: 1200,
                     easing: Easing.inOut(Easing.ease),
                     useNativeDriver: true,
                 }),
                 Animated.timing(floatBoxY, {
-                    toValue: 0, 
+                    toValue: 0,
                     duration: 1200,
                     easing: Easing.inOut(Easing.ease),
                     useNativeDriver: true,
@@ -133,7 +148,7 @@ export default function ItemUnlocked() {
     // 2. Animação de entrada da tela
     useEffect(() => {
         if (!loading && cloth) {
-            
+
             // TOCA O ÁUDIO DA CAIXA SURGINDO
             playSound('appear');
 
@@ -164,13 +179,13 @@ export default function ItemUnlocked() {
 
     // 3. Ação de abrir a caixa
     const handleOpenBox = () => {
-        if (isOpen) return; 
+        if (isOpen) return;
 
-        setIsOpen(true); 
-        
+        setIsOpen(true);
+
         // TOCA O CORAL QUANDO A CAIXA É CLICADA
         playSound('coral');
-        
+
         if (boxFloatAnimation.current) boxFloatAnimation.current.stop();
         Animated.timing(floatBoxY, { toValue: 0, duration: 200, useNativeDriver: true }).start();
 
@@ -179,7 +194,7 @@ export default function ItemUnlocked() {
             duration: 300,
             useNativeDriver: true,
         }).start(() => {
-            
+
             setTitleText("RECOMPENSA OBTIDA!!");
 
             Animated.sequence([
@@ -264,7 +279,7 @@ export default function ItemUnlocked() {
                                 source={CLOTHES_IMAGES[cloth.slug]}
                                 style={[
                                     styles.clothImage,
-                                    { transform: [{ translateY: floatImageY }] } 
+                                    { transform: [{ translateY: floatImageY }] }
                                 ]}
                                 resizeMode="contain"
                             />
@@ -291,7 +306,7 @@ export default function ItemUnlocked() {
                 </View>
 
                 <Animated.View style={{ opacity: buttonOpacity, marginTop: 40 }}>
-                    <Pressable onPress={() => router.push('../loading')} style={styles.button}>
+                    <Pressable onPress={handleNext} style={styles.button}>
                         <Text style={styles.buttonText}>CONTINUAR!</Text>
                     </Pressable>
                 </Animated.View>

@@ -1,3 +1,4 @@
+import { useBackToLoading } from '@/components/useBackToLoading';
 import { FOOD_IMAGES } from '@/src/components/foods/foodMap';
 import { buyMarketItems, fetchMarketFoods, MarketFood } from '@/src/services/marketService';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +29,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function MarketScreen() {
+    const { handleBack } = useBackToLoading();
+
     const params = useLocalSearchParams();
     // Agora o estado guarda as comidas agrupadas
     const [groupedFoods, setGroupedFoods] = useState<Record<string, MarketFood[]>>({});
@@ -187,7 +190,7 @@ export default function MarketScreen() {
             </View>
 
             {/* Substituímos a FlatList por ScrollView para renderizar as categorias */}
-            <ScrollView 
+            <ScrollView
                 contentContainerStyle={[styles.listContent, totalItems > 0 && { paddingBottom: 100 }]}
                 showsVerticalScrollIndicator={false}
             >
@@ -241,11 +244,11 @@ const styles = StyleSheet.create({
     headerTitle: { fontSize: 20, fontWeight: '900', color: '#000', textTransform: 'uppercase', },
     headerMoney: { fontSize: 20, fontWeight: '900', color: '#000', textTransform: 'uppercase', },
     listContent: { padding: 10 },
-    
+
     // Novos estilos para as categorias
     categorySection: { marginBottom: 20 },
     categoryTitle: { fontSize: 18, fontWeight: '900', color: '#000', marginBottom: 10, marginLeft: 5 },
-    
+
     // O flexWrap faz os cards quebrarem de linha, simulando as 2 colunas da FlatList antiga
     row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
 

@@ -29,6 +29,30 @@ export const LOCAL_ASSETS = {
             "Nossa, acho que comi demais.",
         ]
     },
+    fimComerEnjoado: {
+        audios: [
+            require('@/assets/audios/speechs/fimComer/enjoado/audio_01.mp3'),
+            require('@/assets/audios/speechs/fimComer/enjoado/audio_02.mp3'),
+            require('@/assets/audios/speechs/fimComer/enjoado/audio_03.mp3'),
+            require('@/assets/audios/speechs/fimComer/enjoado/audio_04.mp3'),
+            require('@/assets/audios/speechs/fimComer/enjoado/audio_05.mp3'),
+            require('@/assets/audios/speechs/fimComer/enjoado/audio_06.mp3'),
+            require('@/assets/audios/speechs/fimComer/enjoado/audio_07.mp3'),
+            require('@/assets/audios/speechs/fimComer/enjoado/audio_08.mp3'),
+            require('@/assets/audios/speechs/fimComer/enjoado/audio_09.mp3'),
+        ],
+        textos: [
+            "O mesmo sabor de ontem, e de anti-ontem, e de...",
+            "Acho que minhas papilas gustativas vão entrar em greve de tédio.",
+            "A cada mordida, um suspiro de saudade de algo novo.",
+            "Se eu comer isso de novo, vou acabar virando um... ah, deixa 'pra' lá.",
+            "Eu amo você, mas meu estômago está pedindo coisas diferentes...",
+            "Será que esse ingrediente não cansa de ser a estrela do prato todo santo dia? ",
+            "Se eu comer mais um pedacinho disso, vou acabar virando... não sei nem o que! ",
+            "A textura disso aqui já está morando na minha memória... Que tédio gastronômico.",
+            "Hum... o mesmo tempero, o mesmo sabor... cadê a emoção da vida? ",
+        ]
+    },
     aleatorio: {
         audios: [
             require('@/assets/audios/speechs/aleatorio/audio_01.mp3'),
@@ -122,7 +146,7 @@ export const LOCAL_ASSETS = {
             require('@/assets/audios/speechs/fome/audio_07.mp3'),
             require('@/assets/audios/speechs/fome/audio_08.mp3'),
             require('@/assets/audios/speechs/fome/audio_09.mp3'),
-            // ... adicione até o 10
+            
         ],
         textos: [
             "Eu estou com fome, preciso comer um lanche gigante!",
@@ -142,7 +166,7 @@ export const LOCAL_ASSETS = {
             require('@/assets/audios/speechs/sono/audio_02.mp3'),
             require('@/assets/audios/speechs/sono/audio_03.mp3'),
             require('@/assets/audios/speechs/sono/bocejo.mp3'),
-            // ... adicione até o 10
+            
         ],
         textos: [
             "Eu preciso dormir só mais um golinho...",
@@ -157,7 +181,7 @@ export const LOCAL_ASSETS = {
             require('@/assets/audios/speechs/aoAcordar/audio_02.mp3'),
             require('@/assets/audios/speechs/aoAcordar/audio_03.mp3'),
             require('@/assets/audios/speechs/aoAcordar/audio_04.mp3'),
-            // ... adicione até o 10
+            
         ],
         textos: [
             "Nossa, eu acho que dormi de mais hoje.",
@@ -165,5 +189,103 @@ export const LOCAL_ASSETS = {
             "Me sinto descansado agora que dormi bastante.",
             "Estou pronto para mais um dia!",
         ]
-    }
+    },
+    aoRetornar: {
+        audios: [
+            require('@/assets/audios/speechs/aoRetornar/audio_01.mp3'),
+            require('@/assets/audios/speechs/aoRetornar/audio_02.mp3'),
+            require('@/assets/audios/speechs/aoRetornar/audio_03.mp3'),
+            require('@/assets/audios/speechs/aoRetornar/audio_04.mp3'),
+            require('@/assets/audios/speechs/aoRetornar/audio_05.mp3'),
+        ],
+        textos: [
+            "Olha só quem resolveu aparecer! Já estava ficando com saudade.",
+            "O mestre voltou.",
+            "Que bom que você voltou.",
+            "Oi!!",
+            "Meo! Acabei de pensar em você.",
+        ]
+    },
+    conquistaPonto: {
+        audios: [
+            require('@/assets/audios/speechs/game/pontos/ganha/audio_01.mp3'),
+            require('@/assets/audios/speechs/game/pontos/ganha/audio_02.mp3'),
+            require('@/assets/audios/speechs/game/pontos/ganha/audio_03.mp3'),
+            require('@/assets/audios/speechs/game/pontos/ganha/audio_04.mp3'),
+            require('@/assets/audios/speechs/game/pontos/ganha/audio_05.mp3'),
+            require('@/assets/audios/speechs/game/pontos/ganha/audio_06.mp3'),
+            require('@/assets/audios/speechs/game/pontos/ganha/audio_07.mp3'),
+            require('@/assets/audios/speechs/game/pontos/ganha/audio_08.mp3'),
+            
+        ],
+        textos: [
+            "Na mosca!",
+            "Ninguém me para hoje!",
+            "Boa!!!",
+            "Quem é o melhor? Eu sou o melhor!",
+            "Maravilhoso!",
+            "Urruuuu!!",
+            "'Vamo', 'vamoooo'!!!",
+            "Aee!!",
+        ]
+    },
+    perdePonto: {
+        audios: [
+            require('@/assets/audios/speechs/game/pontos/perde/audio_01.mp3'),
+            require('@/assets/audios/speechs/game/pontos/perde/audio_02.mp3'),
+            require('@/assets/audios/speechs/game/pontos/perde/audio_03.mp3'),
+            
+        ],
+        textos: [
+            "Não pode ser.",
+            "Que azar!",
+            "Droga.",
+        ]
+    },
+    ganhaPartida: {
+        audios: [
+            require('@/assets/audios/speechs/game/partida/ganha/audio_01.mp3'),
+            require('@/assets/audios/speechs/game/partida/ganha/audio_02.mp3'),
+            require('@/assets/audios/speechs/game/partida/ganha/audio_03.mp3'),
+            require('@/assets/audios/speechs/game/partida/ganha/audio_04.mp3'),
+            require('@/assets/audios/speechs/game/partida/ganha/audio_05.mp3'),
+            require('@/assets/audios/speechs/game/partida/ganha/audio_06.mp3'),
+        ],
+        textos: [
+            "VITÓRIA! Eu sabia!",
+            "Alguém me para? Ninguém me para!",
+            "É CAMPEÃO! Pode anotar o nome do mito no topo!",
+            "RESPEITA O PAI!",
+            "Eu não jogo, eu dou é aula mesmo.",
+            "Segura esse monte de PONTOOOS!",
+        ]
+    },
+    perdePartida: {
+        audios: [
+            require('@/assets/audios/speechs/game/partida/perde/audio_01.mp3'),
+            require('@/assets/audios/speechs/game/partida/perde/audio_02.mp3'),
+            require('@/assets/audios/speechs/game/partida/perde/audio_03.mp3'),
+            require('@/assets/audios/speechs/game/partida/perde/audio_04.mp3'),
+        ],
+        textos: [
+            "GAME OVER... Todo aquele esforço jogado no lixo.",
+            "Eu fui bem melhor nas outras partidas.",
+            "Tudo bem... não é sempre que a gente ganha.",
+            "Ai, inacreditável.",
+        ]
+    },
+    conquistaSelo: {
+        audios: [
+            require('@/assets/audios/speechs/conquista/selo/audio_01.mp3'),
+            require('@/assets/audios/speechs/conquista/selo/audio_02.mp3'),
+            require('@/assets/audios/speechs/conquista/selo/audio_03.mp3'),
+            require('@/assets/audios/speechs/conquista/selo/audio_04.mp3'),
+        ],
+        textos: [
+            "Esse selo vai ficar lindo no meu perfil, LINDO!",
+            "CARAMBA! Que selo fantástico, LINDO!!",
+            "Esse selo, eu queria tanto esse selo.",
+            "Obrigado por mais essa conquista!!",
+        ]
+    },
 };

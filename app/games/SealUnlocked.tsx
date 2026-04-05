@@ -1,4 +1,6 @@
+import { useBackToLoading } from "@/components/useBackToLoading";
 import { SEALS_IMAGES } from "@/src/components/clothes/sealsMap";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
@@ -23,6 +25,8 @@ const getTierColors = (tier: string) => {
 };
 
 export default function SealUnlocked() {
+  const { handleBack } = useBackToLoading();
+
   const router = useRouter();
   // Pega a string JSON dos parâmetros e converte de volta para Array
   const { seals } = useLocalSearchParams<{ seals: string }>();
@@ -47,10 +51,18 @@ export default function SealUnlocked() {
 
   const sealImage = SEALS_IMAGES[currentSeal.image_url];
 
-  const handleNext = () => {
+  async function handleNext() {
+    const storedToken = await AsyncStorage.getItem('slivi_token');
+
     if (isLastSeal) {
       // Se acabou, volta pra tela anterior (ou pro menu principal)
-      router.push('../loading');
+      router.replace({
+        pathname: '/loading', // Ajuste para o caminho exato da sua loading
+        params: {
+          token: storedToken, // Garanta que o token está sendo passado
+          unlockEvent: 'seal'
+        }
+      });
     } else {
       // Passa pro próximo selo que ele ganhou
       setCurrentIndex((prev) => prev + 1);

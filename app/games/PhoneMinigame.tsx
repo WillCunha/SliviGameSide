@@ -14,58 +14,48 @@ import {
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
-
-const FOOTER_ICON_SIZE = 70;
-const PHONE_ICON_SIZE = 60;
+const FOOTER_ICON_SIZE = 50;
+const PHONE_ICON_SIZE = 40;
 const SLIVI_TARGET_AREA = 350;
 
 const PHONE_FRONT_IMAGE = require('@/assets/images/components/mobiles/celular.png');
 const PHONE_BACK_IMAGE = require('@/assets/images/components/mobiles/blue.png');
 
+const PRAISE_WORDS = ['FANTÁSTICO!', 'RÁPIDO!', 'IMPRESSIONANTE!', 'DEMAIS!', 'BOA!', 'PERFEITO!'];
+const getRandomPraise = () => PRAISE_WORDS[Math.floor(Math.random() * PRAISE_WORDS.length)];
+
 interface PhoneMinigameProps {
+  onGameStart?: () => void;
   onGameEnd: (score: number) => void;
+  onSliviReaction?: (reaction: 'praise' | 'miss' | 'bomb') => void;
   isLightOn: boolean;
 }
 
-type GamePhase = 'IDLE' | 'DRAGGING' | 'PLAYING';
+type GamePhase = 'IDLE' | 'DRAGGING' | 'COUNTDOWN' | 'PLAYING';
 
-export default function PhoneMinigame({ onGameEnd, isLightOn }: PhoneMinigameProps) {
-
+export default function PhoneMinigame({ onGameStart, onGameEnd, onSliviReaction, isLightOn }: PhoneMinigameProps) {
   const [phase, setPhase] = useState<GamePhase>('IDLE');
+  const [countdown, setCountdown] = useState<number | string | null>(null);
   const [score, setScore] = useState(0);
   const [misses, setMisses] = useState(0);
-
-  // O Estado é só para renderizar a tela
   const [activeNodes, setActiveNodes] = useState<any[]>([]);
-  // A REF é a "fonte da verdade" que o setTimeout vai ler
-  const nodesRef = useRef<any[]>([]);
-
-  // Efeitos visuais (textos subindo)
   const [floatingScores, setFloatingScores] = useState<any[]>([]);
 
-  // --- CONFIGURAÇÕES DE DOPAMINA ---
-  const PRAISE_WORDS = ['FANTÁSTICO!', 'RÁPIDO!', 'IMPRESSIONANTE!', 'DEMAIS!', 'BOA!', 'PERFEITO!'];
-  const getRandomPraise = () => PRAISE_WORDS[Math.floor(Math.random() * PRAISE_WORDS.length)];
-
+  const nodesRef = useRef<any[]>([]);
   const phaseRef = useRef(phase);
-  const isLightOnRef = useRef(isLightOn);
   const scoreRef = useRef(0);
+  const gameLoopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const currentSpawnRate = useRef(2500);
 
   useEffect(() => { phaseRef.current = phase; }, [phase]);
-  useEffect(() => { isLightOnRef.current = isLightOn; }, [isLightOn]);
 
   const pan = useRef(new Animated.ValueXY()).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const whiteOverlayOpacity = useRef(new Animated.Value(0)).current;
 
-  const gameLoopTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const currentSpawnRate = useRef(1500);
-
-  // --- MOTOR DE ARRASTAR ---
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => phaseRef.current === 'IDLE' && isLightOnRef.current,
-      onMoveShouldSetPanResponder: () => phaseRef.current === 'IDLE' && isLightOnRef.current,
+      onStartShouldSetPanResponder: () => phaseRef.current === 'IDLE' && isLightOn,
       onPanResponderGrant: () => {
         setPhase('DRAGGING');
         pan.setValue({ x: 0, y: 0 });
@@ -77,28 +67,49 @@ export default function PhoneMinigame({ onGameEnd, isLightOn }: PhoneMinigamePro
         const dropAccepted = Math.abs(gestureState.moveY - height / 2) < SLIVI_TARGET_AREA / 2;
 
         if (dropAccepted) {
-          setPhase('PLAYING');
-          startGameLoop();
+          startCountdown();
         } else {
           setPhase('IDLE');
         }
         Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start();
       },
-      onPanResponderTerminate: () => {
-        setPhase('IDLE');
-        Animated.spring(pan, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start();
-      }
     })
   ).current;
 
-  // --- MOTOR DO JOGO ---
+  // --- LÓGICA DO CONTADOR ---
+  const startCountdown = () => {
+    setPhase('COUNTDOWN');
+    if (onGameStart) {
+      onGameStart();
+    }; // Avisa a Home para silenciar
+
+    let timer = 3;
+    setCountdown(timer);
+
+    const interval = setInterval(() => {
+      timer -= 1;
+      if (timer > 0) {
+        setCountdown(timer);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      } else if (timer === 0) {
+        setCountdown('JÁ!');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        clearInterval(interval);
+        setCountdown(null);
+        setPhase('PLAYING');
+        startGameLoop();
+      }
+    }, 1000);
+  };
+
   const startGameLoop = () => {
     setScore(0);
     scoreRef.current = 0;
     setMisses(0);
     nodesRef.current = [];
     setActiveNodes([]);
-    currentSpawnRate.current = 2500; // Começa tranquilo (2.5s)
+    currentSpawnRate.current = 2500;
 
     Animated.timing(whiteOverlayOpacity, {
       toValue: 0.9,
@@ -109,122 +120,80 @@ export default function PhoneMinigame({ onGameEnd, isLightOn }: PhoneMinigamePro
     scheduleNextNode();
   };
 
-  const cleanupGame = () => {
-    if (gameLoopTimeoutRef.current) clearTimeout(gameLoopTimeoutRef.current);
-    nodesRef.current = [];
-    setActiveNodes([]);
-    setFloatingScores([]);
-  };
-
   const scheduleNextNode = () => {
     if (gameLoopTimeoutRef.current) clearTimeout(gameLoopTimeoutRef.current);
-
     gameLoopTimeoutRef.current = setTimeout(() => {
-      spawnNode();
-      // Aceleração gradativa: tira 25ms por rodada
-      currentSpawnRate.current = Math.max(600, currentSpawnRate.current - 25);
-      scheduleNextNode();
+      if (phaseRef.current === 'PLAYING') {
+        spawnNode();
+        currentSpawnRate.current = Math.max(600, currentSpawnRate.current - 25);
+        scheduleNextNode();
+      }
     }, currentSpawnRate.current);
   };
 
   const spawnNode = () => {
-    // REGRA DE OURO 1: Se já tem um botão de SEGURAR na tela, NÃO cria mais nada!
     const hasHoldNode = nodesRef.current.some(n => n.type === 'hold');
-    if (hasHoldNode) return;
-
-    // REGRA DE OURO 2: Limite máximo de 2 botões normais simultâneos.
-    // (O botão bomba não conta nesse limite para ele poder 'atrapalhar' um normal)
-    const normalNodes = nodesRef.current.filter(n => n.type !== 'bomb');
-    if (normalNodes.length >= 2) return;
+    if (hasHoldNode || nodesRef.current.length >= 2) return;
 
     const id = Math.random().toString(36).substring(2, 9);
-    const randomSeed = Math.random();
-    let nodeType: 'tap' | 'hold' | 'bomb' = 'tap';
+    const seed = Math.random();
+    let type: 'tap' | 'hold' | 'bomb' = seed > 0.9 ? 'bomb' : seed > 0.7 ? 'hold' : 'tap';
 
-    // LÓGICA DE SPAWN:
-    if (randomSeed > 0.9) {
-      // 10% de chance de nascer o INIMIGO (Botão Bomba 'X')
-      nodeType = 'bomb';
-    } else if (randomSeed > 0.7) {
-      // 20% de chance (0.7 a 0.9) de nascer o Hold (segurar)
-      nodeType = 'hold';
-    }
-    // O resto (70%) é Tap normal
-
-    const randomX = Math.floor(Math.random() * (width - 120)) + 30;
-    const randomY = Math.floor(Math.random() * (height - 400)) + 150;
-
-    const newNode = { id, x: randomX, y: randomY, type: nodeType };
+    const newNode = {
+      id,
+      type,
+      x: Math.floor(Math.random() * (width - 120)) + 30,
+      y: Math.floor(Math.random() * (height - 400)) + 150
+    };
 
     nodesRef.current = [...nodesRef.current, newNode];
     setActiveNodes([...nodesRef.current]);
   };
 
-  const handleScore = (id: string, x: number, y: number, isHoldSuccess: boolean) => {
-    // Remove o botão da Ref e do Estado
+  const handleScore = (id: string, x: number, y: number, isHold: boolean) => {
     nodesRef.current = nodesRef.current.filter(n => n.id !== id);
     setActiveNodes([...nodesRef.current]);
-
     setScore(s => {
-      const newScore = s + 10;
-      scoreRef.current = newScore;
-      return newScore;
+      scoreRef.current = s + 10;
+      return scoreRef.current;
     });
-
-    // Dopamina: Cria texto flutuante. Se for sucesso de Hold, manda palavra de incentivo.
-    const textToShow = isHoldSuccess ? getRandomPraise() : '+10';
-    triggerFloatingScore(id, x, y, textToShow);
+    setFloatingScores(prev => [...prev, { id, x, y, text: isHold ? getRandomPraise() : '+10' }]);
+    if (isHold && onSliviReaction) {
+      onSliviReaction('praise');
+    }
+    setTimeout(() => setFloatingScores(prev => prev.filter(f => f.id !== id)), 1000);
   };
 
   const handleMiss = (id: string) => {
-    // Se o usuário não clicou no botão normal a tempo, perde vida
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     nodesRef.current = nodesRef.current.filter(n => n.id !== id);
     setActiveNodes([...nodesRef.current]);
-    processMiss();
-  };
-
-  const processMiss = () => {
+    if (onSliviReaction) onSliviReaction('miss'); // NOVO: Avisa que errou
     setMisses(m => {
-      const newMisses = m + 1;
-      if (newMisses >= 3) {
-        endGame(scoreRef.current);
-      }
-      return newMisses;
+      if (m + 1 >= 3) endGame(scoreRef.current);
+      return m + 1;
     });
   };
 
-  const triggerFloatingScore = (id: string, x: number, y: number, text: string) => {
-    setFloatingScores(prev => [...prev, { id, x, y, text }]);
-    setTimeout(() => {
-      setFloatingScores(prev => prev.filter(f => f.id !== id));
-    }, 1000); // Texto fica um pouco mais na tela se for palavra longa
-  };
-
   const endGame = (finalScore: number) => {
-    cleanupGame();
+    if (gameLoopTimeoutRef.current) clearTimeout(gameLoopTimeoutRef.current);
     setPhase('IDLE');
-    pan.setValue({ x: 0, y: 0 });
-
-    Animated.timing(whiteOverlayOpacity, {
-      toValue: 0,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
-
-    Alert.alert("Game Over!", `O celular descarregou!\nVocê fez ${finalScore} pontos.`);
+    Animated.timing(whiteOverlayOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start();
+    Alert.alert("Game Over", `Score: ${finalScore}`);
     onGameEnd(finalScore);
   };
-
   return (
     <View style={StyleSheet.absoluteFillObject} pointerEvents="box-none">
+      {phase === 'COUNTDOWN' && (
+        <View style={styles.countdownContainer}>
+          <Text style={styles.countdownText}>{countdown}</Text>
+          <Text style={styles.prepareText}>PREPARE-SE!</Text>
+        </View>
+      )}
 
-      {phase !== 'PLAYING' && (
+      {phase !== 'PLAYING' && phase !== 'COUNTDOWN' && (
         <View style={styles.footerButtonContainer} pointerEvents="box-none">
-          <Animated.View
-            {...panResponder.panHandlers}
-            style={[styles.dragPhoneContainer, { transform: [{ translateX: pan.x }, { translateY: pan.y }, { scale: scaleAnim }], opacity: phase === 'DRAGGING' ? 0.9 : 1 }]}
-          >
+          <Animated.View {...panResponder.panHandlers} style={[styles.dragPhoneContainer, { transform: [{ translateX: pan.x }, { translateY: pan.y }, { scale: scaleAnim }] }]}>
             <Image source={PHONE_FRONT_IMAGE} style={styles.phoneIcon} resizeMode="contain" />
           </Animated.View>
         </View>
@@ -232,30 +201,29 @@ export default function PhoneMinigame({ onGameEnd, isLightOn }: PhoneMinigamePro
 
       {phase === 'PLAYING' && (
         <View style={styles.playingOverlay} pointerEvents="box-none">
-          <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'white', opacity: whiteOverlayOpacity, zIndex: 310 }]} pointerEvents="none" />
-
+          <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'white', opacity: whiteOverlayOpacity, zIndex: 330 }]} pointerEvents="none" />
           <View style={styles.sliviPhoneContainer} pointerEvents="none">
             <Image source={PHONE_BACK_IMAGE} style={styles.phoneIconHeld} resizeMode="contain" />
           </View>
-
           <View style={styles.hudContainer}>
             <Text style={styles.scoreText}>SCORE: {score}</Text>
             <Text style={styles.missesText}>ERROS: {misses}/3</Text>
           </View>
-
-          {/* RENDERIZA OS TEXTOS FLUTUANTES (+10 ou Elogios) */}
-          {floatingScores.map(f => (
-            <FloatingScore
-              key={f.id}
-              x={f.x}
-              y={f.y}
-              text={f.text} // <--- Adicione essa linha aqui!
-            />
-          ))}
-
-          {/* RENDERIZA OS BOTÕES USANDO NOSSO NOVO SUBCOMPONENTE DOPAMINÉRGICO */}
+          {floatingScores.map(f => <FloatingScore key={f.id} {...f} />)}
           {activeNodes.map(node => (
-            <GameNode key={node.id} node={node} onScore={handleScore} onMiss={handleMiss} />
+            <GameNode
+              key={node.id}
+              node={node}
+              onScore={handleScore}
+              onMiss={handleMiss}
+              onBombClick={() => endGame(scoreRef.current)} // CORREÇÃO DO ERRO AQUI
+              onBombMiss={(id) => {
+                nodesRef.current = nodesRef.current.filter(n => n.id !== id);
+                if (onSliviReaction) onSliviReaction('bomb'); // NOVO: Avisa da bomba
+                endGame(scoreRef.current);
+                setActiveNodes([...nodesRef.current]);
+              }}
+            />
           ))}
         </View>
       )}
@@ -380,16 +348,18 @@ const GameNode = ({ node, onScore, onMiss, onBombClick, onBombMiss }: any) => {
   );
 };
 const styles = StyleSheet.create({
-  footerButtonContainer: { position: 'absolute', bottom: 40, alignSelf: 'center', width: '90%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', zIndex: 200, pointerEvents: 'box-none' },
-  dragPhoneContainer: { backgroundColor: '#fff', borderWidth: 2, borderColor: '#000', borderRadius: 15, width: FOOTER_ICON_SIZE, height: FOOTER_ICON_SIZE, alignItems: 'center', justifyContent: 'center' },
+  footerButtonContainer: { position: 'absolute', bottom: 40, right: 20, width: '10%', flexDirection: 'row', zIndex: 1, pointerEvents: 'box-none' },
+  dragPhoneContainer: { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#000', borderRadius: 15, width: FOOTER_ICON_SIZE, height: FOOTER_ICON_SIZE, alignItems: 'center', justifyContent: 'center' },
   phoneIcon: { width: PHONE_ICON_SIZE, height: PHONE_ICON_SIZE },
   playingOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 300 },
-  sliviPhoneContainer: { position: 'absolute', bottom: 300, alignSelf: 'center', zIndex: 320 },
+  sliviPhoneContainer: { position: 'absolute', bottom: 200, alignSelf: 'center', zIndex: 320 },
   phoneIconHeld: { width: 200, height: 200 },
   hudContainer: { position: 'absolute', top: 100, alignSelf: 'center', zIndex: 360, alignItems: 'center' },
   scoreText: { fontSize: 32, fontWeight: '900', color: '#4AFF88', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 4 },
   missesText: { fontSize: 24, fontWeight: '900', color: '#FF4A4A', textShadowColor: '#000', textShadowOffset: { width: 1, height: 1 }, textShadowRadius: 4 },
-
+  countdownContainer: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 500 },
+  countdownText: { fontSize: 120, fontWeight: '900', color: '#4AFF88', textShadowColor: '#000', textShadowRadius: 10 },
+  prepareText: { fontSize: 30, fontWeight: '900', color: '#fff', marginTop: 20, letterSpacing: 5 },
   tapNode: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#FF9800', borderWidth: 3, borderColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.8, shadowRadius: 2 },
   bombNode: { width: 65, height: 65, borderRadius: 10, backgroundColor: '#000', borderWidth: 4, borderColor: '#FF4A4A', alignItems: 'center', justifyContent: 'center', elevation: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 1, shadowRadius: 3 },
   holdNode: { width: 70, height: 70, borderRadius: 15, backgroundColor: '#E91E63', borderWidth: 3, borderColor: '#fff', alignItems: 'center', justifyContent: 'center', elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.8, shadowRadius: 2, overflow: 'hidden' },
