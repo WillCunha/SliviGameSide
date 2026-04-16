@@ -30,7 +30,7 @@ export default function Slivi({
   const ratio = size / BASE_SIZE;
   const bodySize = size;
   const eyeWidth = 72 * ratio;
-  const eyesTopOffset = bodySize * 0.26;
+  const eyesTopOffset = bodySize * 0.24;
   const eyeDisplaySize = 150 * ratio;
   const mouthWidth = 45 * ratio;
   const mouthTopOffset = bodySize * 0.5;

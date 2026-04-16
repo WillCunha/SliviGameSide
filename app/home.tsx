@@ -74,7 +74,7 @@ const WEATHER_IMAGES = {
 export default function HomeScreen() {
 
   const params = useLocalSearchParams();
-  const {unlockEvent} = useLocalSearchParams();
+  const { speechEvent } = useLocalSearchParams();
 
   const token = typeof params.token === 'string' ? params.token : undefined;
   const userId = typeof params.userId === 'string' ? Number(params.userId) : undefined;
@@ -154,6 +154,7 @@ export default function HomeScreen() {
   const lastCategoryRef = useRef<string | null>(null);
   const speechCountRef = useRef(0);
   const nextFourthWallRef = useRef(Math.floor(Math.random() * 10) + 25)
+  const queuedSpeechEventRef = useRef<string | null>(null);
 
   // --- AUDIOS AMBIENTE ---
   const [ambientSound, setAmbientSound] = useState<Audio.Sound | null>(null);
@@ -245,22 +246,30 @@ export default function HomeScreen() {
 
   // Controla as falas de conquistas.
   useEffect(() => {
-    if (unlockEvent) {
-      const timer = setTimeout(() => {
-        if (unlockEvent === 'item') {
-          handleSliviSpeech('comemoraItem', true); 
-        } else if (unlockEvent === 'seal') {
-          handleSliviSpeech('conquistaSelo', true); 
-        }
-      }, 2000);
+    console.log("Evento de fala recebido:", speechEvent);
+    if (speechEvent) {
+      if (isSleepingRef.current) {
+        console.log("Slivi está dormindo. Guardando evento na fila:", speechEvent);
+        queuedSpeechEventRef.current = speechEvent as string;
+        router.setParams({ speechEvent: undefined });
+      } else {
+        const timer = setTimeout(() => {
+          if (speechEvent === 'aoRetornar') {
+            handleSliviSpeech('aoRetornar', true);
+          } else if (speechEvent === 'seal') {
+            handleSliviSpeech('conquistaSelo', true);
+          } else if (speechEvent === 'item') {
+            handleSliviSpeech('comemoraItem', true);
+          }
 
-      // Limpa o parâmetro da rota imediatamente para que, 
-      // se a tela re-renderizar, ele não repita a comemoração.
-      router.setParams({ unlockEvent: undefined });
+          router.setParams({ speechEvent: undefined });
 
-      return () => clearTimeout(timer);
+        }, 2000);
+
+        return () => clearTimeout(timer);
+      }
     }
-  }, [unlockEvent]);
+  }, [speechEvent]);
 
   // Checa as notificações
   useEffect(() => {
@@ -623,23 +632,37 @@ export default function HomeScreen() {
           speechCountRef.current = 0;
           nextFourthWallRef.current = Math.floor(Math.random() * 10) + 25;
         } else {
-          // Se sliviStates for null, assumimos falso para evitar o loop vazio
+          // --- VALIDAÇÕES DE ESTADO ---
           const comFome = sliviStates ? sliviStates.HUNGER < 50 : false;
           const comSono = sliviStates ? (sliviStates.SLEEP < 30 || sliviStates.ENERGY < 30) : false;
 
-          // Criamos uma "piscina" de opções base. Sempre tem chance de algo aleatório.
-          let opcoesValidas = ['aleatorio', 'piadas'];
+          // Adicionamos a checagem da emoção BRAVO
+          const muitoBravo = emotion === 'BRAVO' || (sliviStates && sliviStates.BRAVO > 50);
 
-          // Se tiver condição especial, adicionamos na piscina (aumentando a chance)
+          // Verifica se 'tired' existe no objeto de roupas e se possui alguma chave dentro (Object.keys)
+          const temRoupaEnjoada = sliviClothing && sliviClothing.tired && Object.keys(sliviClothing.tired).length > 0;
+
+          // --- PISCINA BASE ---
+          // Colocamos mais 'aleatorio' para diluir as piadas e quebrar o loop do "ping-pong"
+          let opcoesValidas = ['aleatorio', 'aleatorio', 'aleatorio', 'piadas', 'espirro'];
+
+          // --- ADICIONANDO PESOS POR CONDIÇÃO ---
           if (comFome) {
-            opcoesValidas.push('fome', 'fome'); // Peso duplo para fome
+            opcoesValidas.push('fome', 'fome', 'fome'); // Fome geralmente é urgente
           }
           if (comSono) {
-            opcoesValidas.push('sono', 'sono'); // Peso duplo para sono
+            opcoesValidas.push('sono', 'sono');
+          }
+          if (muitoBravo) {
+            opcoesValidas.push('bravo', 'bravo');
+          }
+          if (temRoupaEnjoada) {
+            // Se ele estiver enjoado das roupas, joga na piscina!
+            opcoesValidas.push('roupasEnjoado', 'roupasEnjoado');
           }
 
-          // 5% de chance de espirrar
-          if (Math.random() < 0.05) {
+          // 10% de chance de espirrar (aumentei levemente para ele dar o ar da graça)
+          if (Math.random() < 0.10) {
             opcoesValidas.push('espirro');
           }
 
@@ -714,7 +737,6 @@ export default function HomeScreen() {
       }
 
     } else {
-      // 1. Atualização Otimista (Front-end)
       setIsLightOn(true);
       setSleepState(emotion);
       isSleepingRef.current = false;
@@ -723,20 +745,27 @@ export default function HomeScreen() {
         clearTimeout(sleepTimerRef.current);
         sleepTimerRef.current = null;
       }
-
-      // 2. Sincronização segura com o back-end
       try {
-        // Primeiro garantimos que o back-end registrou que ele acordou
         await wakeSlivi();
-
-        // SÓ ENTÃO puxamos o estado novo (evitando a lâmpada piscar)
         await loadState();
       } catch (err) {
         console.log("Erro wake:", err);
       }
 
-      // 3. Verifica se ele precisa falar algo
-      if (sliviStates && (sliviStates.SLEEP > 50 || sliviStates.ENERGY > 50)) {
+      if (queuedSpeechEventRef.current) {
+        setTimeout(() => {
+          const queuedEvent = queuedSpeechEventRef.current;
+          if (queuedEvent === 'aoRetornar') {
+            handleSliviSpeech('aoRetornar', true);
+          } else if (queuedEvent === 'seal') {
+            handleSliviSpeech('conquistaSelo', true);
+          } else if (queuedEvent === 'item') {
+            handleSliviSpeech('comemoraItem', true);
+          }
+          queuedSpeechEventRef.current = null;
+        }, 1500);
+
+      } else if (sliviStates && (sliviStates.SLEEP > 50 || sliviStates.ENERGY > 50)) {
         handleSliviSpeech('aoAcordar', true);
       }
     }
@@ -1394,7 +1423,7 @@ export default function HomeScreen() {
         <TouchableOpacity onPress={() => {
           if (isLightOn) {
             router.push({
-              pathname: "/store/Market",
+              pathname: "/store/StoreClothes",
               params: { money: money } // Enviamos o ID para a nova tela
             });
           }

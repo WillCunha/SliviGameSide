@@ -216,12 +216,12 @@ export default function PhoneMinigame({ onGameStart, onGameEnd, onSliviReaction,
               node={node}
               onScore={handleScore}
               onMiss={handleMiss}
-              onBombClick={() => endGame(scoreRef.current)} // CORREÇÃO DO ERRO AQUI
+              onBombClick={() => endGame(scoreRef.current)} // Correto: Clicou na bomba, Game Over.
               onBombMiss={(id) => {
                 nodesRef.current = nodesRef.current.filter(n => n.id !== id);
-                if (onSliviReaction) onSliviReaction('bomb'); // NOVO: Avisa da bomba
-                endGame(scoreRef.current);
                 setActiveNodes([...nodesRef.current]);
+                setFloatingScores(prev => [...prev, { id, x: node.x, y: node.y, text: 'BOOA!!' }]);
+                if (onSliviReaction) onSliviReaction('praise'); 
               }}
             />
           ))}
@@ -348,7 +348,7 @@ const GameNode = ({ node, onScore, onMiss, onBombClick, onBombMiss }: any) => {
   );
 };
 const styles = StyleSheet.create({
-  footerButtonContainer: { position: 'absolute', bottom: 40, right: 20, width: '10%', flexDirection: 'row', zIndex: 1, pointerEvents: 'box-none' },
+  footerButtonContainer: { position: 'absolute', bottom: 40, right: 20, width: '10%', flexDirection: 'row', zIndex: 100, pointerEvents: 'box-none' },
   dragPhoneContainer: { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#000', borderRadius: 15, width: FOOTER_ICON_SIZE, height: FOOTER_ICON_SIZE, alignItems: 'center', justifyContent: 'center' },
   phoneIcon: { width: PHONE_ICON_SIZE, height: PHONE_ICON_SIZE },
   playingOverlay: { ...StyleSheet.absoluteFillObject, zIndex: 300 },

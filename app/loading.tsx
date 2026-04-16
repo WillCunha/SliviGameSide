@@ -142,6 +142,14 @@ export default function LoadingScreen() {
                 // 5. Transforma os objetos em strings para passar via params
                 const stateString = JSON.stringify(sliviState);
                 const weatherString = JSON.stringify(weatherData);
+                console.log("UnlockEvent:", unlockEvent);
+
+                let finalSpeechEvent = unlockEvent;
+
+                // Se o personagem ficou muito tempo longe, atualizamos a variável local
+                if (sliviState.hoursAway > 6) {
+                    finalSpeechEvent = "aoRetornar";
+                }
 
                 // 6. Tudo pronto! Envia para a Home
                 router.replace({
@@ -152,7 +160,7 @@ export default function LoadingScreen() {
                         initialSliviState: stateString,
                         initialWeather: weatherString,
                         isNewUser,
-                        unlockEvent: unlockEvent
+                        speechEvent: finalSpeechEvent
                     },
                 });
 

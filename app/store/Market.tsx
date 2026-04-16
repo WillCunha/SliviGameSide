@@ -103,8 +103,19 @@ export default function MarketScreen() {
 
             const response = await buyMarketItems(token, itemsToBuy);
 
+            const storedToken = await AsyncStorage.getItem('slivi_token');
+
             Alert.alert("Sucesso", response.message || "Compra realizada com sucesso!", [
-                { text: "OK", onPress: () => router.replace('/home') }
+                {
+                    text: "OK", 
+                    onPress: () =>
+                        router.replace({
+                            pathname: '/loading', // Ajuste para o caminho exato da sua loading
+                            params: {
+                                token: storedToken,
+                            }
+                        })
+                }
             ]);
 
             setCart({});
@@ -186,7 +197,7 @@ export default function MarketScreen() {
                     <Ionicons name="arrow-back" size={28} color="#000" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Supermercado</Text>
-                <Text style={styles.headerMoney}>{formatMoney(money)}</Text>
+                <Text style={styles.headerMoney}>🪙  {formatMoney(money)}</Text>
             </View>
 
             {/* Substituímos a FlatList por ScrollView para renderizar as categorias */}

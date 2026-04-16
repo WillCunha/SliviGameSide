@@ -587,6 +587,7 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
 
   async function handleGameOver() {
     if (gameOver) return;
+    console.log('entrou no handleGameOver()')
     setGameOver(true);
     triggerShake();
     setMoodValue(0);
@@ -896,7 +897,7 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
                       Objetivo:
                     </Text>
                     <Text style={[styles.hudText, { fontSize: 12, opacity: completed ? 0.6 : 1 }]}>
-                      {obj.title || `${obj.description}`}
+                      {obj.title || `${obj.description}`}.
                     </Text>
                     {completed && <Text style={{ color: COLORS.POSITIVE, marginLeft: 6, fontWeight: 'bold' }}>✓</Text>}
                   </View>
@@ -1001,7 +1002,7 @@ export default function SliviPulse({ emotion }: { emotion: Emotion }) {
 
                 {objectives.length > 0 ? (
                   <Text style={{ color: '#fff', fontSize: 22, textAlign: 'center', fontWeight: 'bold' }}>
-                    {objectives[0].title || objectives[0].description}
+                    {objectives[0].title || objectives[0].description}.
                   </Text>
                 ) : (
                   <Text style={{ color: '#fff', fontSize: 18, textAlign: 'center', fontStyle: 'italic' }}>

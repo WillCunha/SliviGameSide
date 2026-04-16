@@ -53,6 +53,28 @@ export const LOCAL_ASSETS = {
             "Hum... o mesmo tempero, o mesmo sabor... cadê a emoção da vida? ",
         ]
     },
+    roupasEnjoado: {
+        audios: [
+            require('@/assets/audios/speechs/enjoado/roupas/audio_01.mp3'),
+            require('@/assets/audios/speechs/enjoado/roupas/audio_02.mp3'),
+            require('@/assets/audios/speechs/enjoado/roupas/audio_03.mp3'),
+            require('@/assets/audios/speechs/enjoado/roupas/audio_04.mp3'),
+            require('@/assets/audios/speechs/enjoado/roupas/audio_05.mp3'),
+            require('@/assets/audios/speechs/enjoado/roupas/audio_06.mp3'),
+            require('@/assets/audios/speechs/enjoado/roupas/audio_07.mp3'),
+        ],
+        textos: [
+            "O mesmo sabor de ontem, e de anti-ontem, e de...",
+            "Acho que minhas papilas gustativas vão entrar em greve de tédio.",
+            "A cada mordida, um suspiro de saudade de algo novo.",
+            "Se eu comer isso de novo, vou acabar virando um... ah, deixa 'pra' lá.",
+            "Eu amo você, mas meu estômago está pedindo coisas diferentes...",
+            "Será que esse ingrediente não cansa de ser a estrela do prato todo santo dia? ",
+            "Se eu comer mais um pedacinho disso, vou acabar virando... não sei nem o que! ",
+            "A textura disso aqui já está morando na minha memória... Que tédio gastronômico.",
+            "Hum... o mesmo tempero, o mesmo sabor... cadê a emoção da vida? ",
+        ]
+    },
     aleatorio: {
         audios: [
             require('@/assets/audios/speechs/aleatorio/audio_01.mp3'),
@@ -286,6 +308,29 @@ export const LOCAL_ASSETS = {
             "CARAMBA! Que selo fantástico, LINDO!!",
             "Esse selo, eu queria tanto esse selo.",
             "Obrigado por mais essa conquista!!",
+        ]
+    },
+    comemoraItem: {
+        audios: [
+            require('@/assets/audios/speechs/conquista/item/audio_01.mp3'),
+            require('@/assets/audios/speechs/conquista/item/audio_02.mp3'),
+            require('@/assets/audios/speechs/conquista/item/audio_03.mp3'),
+            require('@/assets/audios/speechs/conquista/item/audio_04.mp3'),
+            require('@/assets/audios/speechs/conquista/item/audio_05.mp3'),
+            require('@/assets/audios/speechs/conquista/item/audio_06.mp3'),
+            require('@/assets/audios/speechs/conquista/item/audio_07.mp3'),
+            require('@/assets/audios/speechs/conquista/item/audio_08.mp3'),
+            require('@/assets/audios/speechs/conquista/item/audio_09.mp3'),
+        ],
+        textos: [
+            "Que roupinha mais linda... todo o nosso esforço compensou 'pa carai'.",
+            "Ansioso 'pra' experimentar meu novo look... combina com a minha fofura, né?",
+            "Essa roupinha tem cheiro de vitória e de marshmallow!",
+            "Quem diria que jogar tanto me deixaria tão estiloso? Chupa essa, sociedade!",
+            "Aiiin, que fofura de roupinha nova!",
+            "Mais uma pro meu guarda-roupas! Vamooo!!!",
+            "Mano, mano, mano!!! Eu preciso muuuito de um rolê pra testar essa roupa nova!!",
+            "Missão cumprida. O upgrade do meu guarda-roupa foi processado com sucesso total.",
         ]
     },
 };
